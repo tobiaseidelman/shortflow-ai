@@ -6,17 +6,19 @@ ShortFlow AI es un MVP web para analizar videos largos, crear candidatos de clip
 
 No necesitás instalar Python ni FFmpeg en tu Mac.
 
-1. Creá un repositorio nuevo en GitHub.
-2. Subí **todo el contenido de esta carpeta** al repositorio, incluyendo `.devcontainer` y `.github`.
-3. En GitHub abrí **Code → Codespaces → Create codespace on main**.
-4. Esperá a que termine la creación. Codespaces instala automáticamente Python 3.12, FFmpeg y las dependencias.
-5. ShortFlow AI se inicia automáticamente en el puerto `8000`. Cuando aparezca la notificación del puerto, elegí **Open in Browser**.
+1. Abrí este repositorio en GitHub.
+2. Elegí **Code → Codespaces → Create codespace on main**.
+3. Esperá a que termine la instalación de Python 3.12, FFmpeg y las dependencias.
+4. En la terminal ejecutá `bash start.sh`.
+5. Cuando aparezca la notificación del puerto `8000`, elegí **Open in Browser**.
+
+Si ya tenías un Codespace anterior, ejecutá **Codespaces: Rebuild Container** desde la paleta de comandos para aplicar esta configuración.
 
 Si el navegador no se abre solo, en Codespaces abrí la pestaña **Ports** y hacé clic en el enlace correspondiente al puerto `8000`.
 
-### Reiniciar la aplicación
+### Iniciar o reiniciar la aplicación
 
-En la terminal del Codespace:
+En la terminal del Codespace (para reiniciar, primero detené el servidor con `Ctrl+C`):
 
 ```bash
 bash start.sh
@@ -38,7 +40,7 @@ Deberías ver un JSON que indica si FFmpeg está disponible y si el almacenamien
 - OpenCV headless
 - SQLite
 - Puerto 8000 reenviado al navegador
-- Inicio automático del servidor al iniciar el Codespace
+- Dependencias instaladas en `.venv/`; inicio manual con `bash start.sh`
 
 ## Datos y archivos
 
@@ -55,10 +57,10 @@ Dentro de un Codespace, esos datos permanecen en el espacio de trabajo mientras 
 
 ## Ejecutar fuera de Codespaces
 
-Requiere Python 3.10+ y FFmpeg disponible en PATH.
+Requiere Python 3.12+ y FFmpeg disponible en PATH.
 
 ```bash
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 bash start.sh
@@ -67,8 +69,8 @@ bash start.sh
 ## Pruebas
 
 ```bash
-pip install -r requirements-dev.txt
-pytest -q
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q
 ```
 
 También se incluye un workflow de GitHub Actions en `.github/workflows/ci.yml` que prueba el proyecto con Python 3.12 y FFmpeg después de cada push o pull request.
@@ -76,3 +78,33 @@ También se incluye un workflow de GitHub Actions en `.github/workflows/ci.yml` 
 ## Alcance actual
 
 El análisis de video, scoring, persistencia de clips, optimización de secuencias y render son locales al entorno. La generación de historias actual funciona sin API externa mediante plantillas. Servicios externos de TTS natural o importación autorizada desde plataformas requieren un proveedor/API y credenciales propias; el proyecto no incluye mecanismos para evadir DRM, autenticación ni restricciones de plataformas.
+
+## Estructura
+
+```text
+.devcontainer/          # Python 3.12, FFmpeg y configuración de Codespaces
+.github/workflows/     # Pruebas automáticas
+app/
+  __init__.py
+  main.py              # FastAPI y rutas
+  db.py                # SQLite
+  models.py
+  video_engine.py
+  static/              # app.css, app.js
+  templates/           # index.html
+storage/
+  uploads/
+  renders/
+  temp/
+tests/
+.env.example
+.gitignore
+pytest.ini
+requirements.txt
+requirements-dev.txt
+start.sh
+```
+
+`start.sh` selecciona `.venv/bin/python` y cambia a la raíz del proyecto, por lo que también funciona invocándolo por ruta desde otra carpeta. Verifica Python y FFmpeg antes de arrancar.
+
+Las rutas predeterminadas de SQLite, plantillas, recursos estáticos y almacenamiento se calculan desde el código de la aplicación. Para cambiarlas, exportá `SHORTFLOW_DB_PATH` o `SHORTFLOW_STORAGE_DIR`; también podés exportar `HOST` y `PORT`. `.env.example` documenta las opciones: no se carga automáticamente. Las pruebas usan almacenamiento temporal y no modifican tus videos ni tu base de datos.
