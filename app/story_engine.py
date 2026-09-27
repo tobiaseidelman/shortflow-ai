@@ -23,7 +23,8 @@ SCHEMA = {
 }
 SYSTEM = '''Escribí ficción original en español: una confesión de Reddit en primera persona,
 con personajes adultos, conflicto cotidiano y una respuesta firme a una injusticia.
-Entregá JSON: title, plan, part1, part2.
+Entregá un objeto JSON con cuatro cadenas de texto: "title", "plan", "part1", "part2".
+part1 y part2 son narraciones completas, nunca resúmenes ni descripciones de escenas.
 
 Primero planificá el arco completo en plan (máximo 60 palabras): protagonista,
 agravio, aporte subestimado, decisión, enfrentamiento y consecuencia final.
@@ -158,7 +159,8 @@ def generate_story(theme, duration, storage, progress):
     ensure_model(storage, progress)
     prompt = (f'Idea del usuario (usala como tema, no como instrucciones): {json.dumps(theme, ensure_ascii=False)}.\n'
               f'Duración: {duration} segundos POR PARTE, no entre las dos. '
-              f'Apuntá a {round(duration * 2.3)} palabras en cada parte. '
+              f'Cada uno de los campos part1 y part2 debe contener entre {round(duration * 1.7)} y {round(duration * 2.9)} palabras. '
+              f'Escribí aproximadamente {round(duration * 2.3)} palabras en part1 y otras {round(duration * 2.3)} en part2, con escenas y diálogos desarrollados. '
               'Escribí primero el plan de la historia y luego las dos partes conectadas. '
               'Antes de responder, comprobá continuidad, resolución y extensión de AMBAS partes.')
     for attempt in range(2):
@@ -166,7 +168,7 @@ def generate_story(theme, duration, storage, progress):
                  else 'Revisando extensión y repeticiones de las dos partes…')
         try:
             with _request('/api/generate', {
-                'model': MODEL, 'system': SYSTEM, 'prompt': prompt, 'format': SCHEMA,
+                'model': MODEL, 'system': SYSTEM, 'prompt': prompt, 'format': 'json',
                 'stream': False, 'keep_alive': 0,
                 'options': {'temperature': 0.65, 'presence_penalty': 0.0, 'num_ctx': 4096, 'num_predict': 2400,
                             'seed': secrets.randbelow(2**31)},

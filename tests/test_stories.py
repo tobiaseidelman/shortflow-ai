@@ -127,8 +127,8 @@ def test_one_local_request_generates_both_parts(tmp_path, monkeypatch):
     assert seen[0][1]['keep_alive'] == 0
     assert 'Tema propio' in seen[0][1]['prompt']
     assert 'POR PARTE' in seen[0][1]['prompt']
-    assert 'part1' in seen[0][1]['format']['required']
-    assert 'part2' in seen[0][1]['format']['required']
+    assert seen[0][1]['format'] == 'json'
+    assert 'part1' in seen[0][1]['prompt'] and 'part2' in seen[0][1]['prompt']
 
 
 def test_bad_output_is_retried_once_then_reported(tmp_path, monkeypatch):
