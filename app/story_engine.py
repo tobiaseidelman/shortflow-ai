@@ -11,7 +11,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
-MODEL = 'qwen3.5:4b'
+MODEL = 'qwen2.5:7b'
 URL = 'http://127.0.0.1:11434'
 _server = None
 _http = build_opener(ProxyHandler({}))
@@ -107,7 +107,7 @@ def ensure_model(storage, progress):
             raise StoryGenerationError('La IA local no respondió al iniciar. Volvé a intentarlo.')
     if any(model.get('name') == MODEL for model in models):
         return
-    progress('Descargando la IA por primera vez (aprox. 3,4 GB). Puede tardar varios minutos…')
+    progress('Descargando la IA por primera vez (aprox. 4,7 GB). Puede tardar varios minutos…')
     try:
         # Stream download progress rather than holding the browser request open.
         with _request('/api/pull', {'model': MODEL, 'stream': True}, timeout=600) as response:
@@ -167,8 +167,8 @@ def generate_story(theme, duration, storage, progress):
         try:
             with _request('/api/generate', {
                 'model': MODEL, 'system': SYSTEM, 'prompt': prompt, 'format': SCHEMA,
-                'stream': False, 'think': True, 'keep_alive': 0,
-                'options': {'temperature': 0.65, 'presence_penalty': 0.0, 'num_ctx': 8192, 'num_predict': 6144,
+                'stream': False, 'keep_alive': 0,
+                'options': {'temperature': 0.65, 'presence_penalty': 0.0, 'num_ctx': 4096, 'num_predict': 2400,
                             'seed': secrets.randbelow(2**31)},
             }, timeout=900) as response:
                 raw = json.load(response)

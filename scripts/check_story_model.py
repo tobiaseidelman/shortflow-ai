@@ -1,4 +1,4 @@
-"""Opt-in real-model check: downloads ~3.4 GB, never calls a paid API."""
+"""Opt-in real-model check: downloads ~4.7 GB, never calls a paid API."""
 import json
 from pathlib import Path
 import tempfile

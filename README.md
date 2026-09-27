@@ -117,12 +117,12 @@ Las rutas predeterminadas de SQLite, plantillas, recursos estáticos y almacenam
 
 En **Historias**, escribí una idea y elegí la duración **de cada parte**. El botón **GENERAR PARTE 1 Y 2** produce una misma historia de ficción en primera persona: conflicto y suspenso en la primera parte; continuación y resolución en la segunda. El modelo primero prepara un plan común: agravio, recurso del protagonista, enfrentamiento pendiente y decisión final. Después escribe ambas partes en una misma solicitud para compartir personajes y hechos. La duración elegible es de 30, 45, 60, 90 o 120 segundos por parte; 90 es el valor inicial. No son publicaciones extraídas de Reddit.
 
-El motor usa [Qwen3.5 4B](https://ollama.com/library/qwen3.5:4b) mediante [Ollama local](https://docs.ollama.com/faq). No requiere claves, saldo ni una API de pago. La descarga inicial ocupa aproximadamente **3,4 GB**, además del programa Ollama. Se guarda en `storage/ollama/models/`, fuera de Git. En Codespaces consume la cuota de cómputo y almacenamiento del entorno; no significa que Codespaces sea ilimitado o gratuito.
+El motor usa [Qwen2.5 7B](https://ollama.com/library/qwen2.5:7b) mediante [Ollama local](https://docs.ollama.com/faq). No requiere claves, saldo ni una API de pago. La descarga inicial ocupa aproximadamente **4,7 GB**, además del programa Ollama. Se guarda en `storage/ollama/models/`, fuera de Git. En Codespaces consume la cuota de cómputo y almacenamiento del entorno; no significa que Codespaces sea ilimitado o gratuito.
 
 - **Codespace existente:** guardá tu trabajo, actualizá la rama con `git pull --ff-only` y ejecutá **Codespaces: Rebuild Container**. Luego `bash start.sh`.
 - **Codespace nuevo:** Ollama se instala con el contenedor. La primera generación descarga el modelo y muestra su progreso; las siguientes reutilizan esa descarga.
 - **Fuera de Codespaces:** instalá [Ollama](https://ollama.com/download) en la misma máquina donde se ejecuta ShortFlow. La aplicación utiliza únicamente `127.0.0.1:11434`. No hace falta publicar ese puerto.
-- Prevé varios minutos de generación en CPU y suficiente memoria libre para un modelo de 4B; el tiempo depende del equipo. Evitá renderizar video mientras genera historias si falta memoria. El modelo se descarga de memoria al terminar.
+- Prevé varios minutos de generación en CPU y suficiente memoria libre para un modelo de 7B; el tiempo depende del equipo. Evitá renderizar video mientras genera historias si falta memoria. El modelo se descarga de memoria al terminar.
 
 La pantalla muestra progreso y puede recuperarlo al volver a **Historias**. Solo se permite una generación a la vez. Reiniciar el servidor interrumpe el trabajo activo y muestra un mensaje para reintentarlo; las historias ya guardadas se conservan. El despliegue actual usa un único proceso de Uvicorn, como `start.sh`.
 
