@@ -115,6 +115,8 @@ Las rutas predeterminadas de SQLite, plantillas, recursos estáticos y almacenam
 
 ## Historias tipo Reddit: parte 1 y parte 2
 
+**Estado: experimental, pendiente de validación narrativa.** Las 24 pruebas de la aplicación pasan, pero la última prueba real del modelo falló por extensión incluso tras revisar el borrador. También se observaron cambios de punto de vista y problemas de coherencia. La integración está implementada; no se considera lista como generador de calidad validada. No se relajaron las comprobaciones para aceptar relatos incompletos.
+
 En **Historias**, escribí una idea y elegí la duración **de cada parte**. El botón **GENERAR PARTE 1 Y 2** produce una misma historia de ficción en primera persona: conflicto y suspenso en la primera parte; continuación y resolución en la segunda. El modelo primero prepara un plan común: agravio, recurso del protagonista, enfrentamiento pendiente y decisión final. Después escribe ambas partes en una misma solicitud para compartir personajes y hechos. La duración elegible es de 30, 45, 60, 90 o 120 segundos por parte; 90 es el valor inicial. No son publicaciones extraídas de Reddit.
 
 El motor usa [Qwen2.5 7B](https://ollama.com/library/qwen2.5:7b) mediante [Ollama local](https://docs.ollama.com/faq). No requiere claves, saldo ni una API de pago. La descarga inicial ocupa aproximadamente **4,7 GB**, además del programa Ollama. Se guarda en `storage/ollama/models/`, fuera de Git. En Codespaces consume la cuota de cómputo y almacenamiento del entorno; no significa que Codespaces sea ilimitado o gratuito.
