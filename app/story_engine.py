@@ -167,8 +167,8 @@ def generate_story(theme, duration, storage, progress):
         try:
             with _request('/api/generate', {
                 'model': MODEL, 'system': SYSTEM, 'prompt': prompt, 'format': SCHEMA,
-                'stream': False, 'think': False, 'keep_alive': 0,
-                'options': {'temperature': 0.65, 'presence_penalty': 0.0, 'num_ctx': 4096, 'num_predict': 3200,
+                'stream': False, 'think': True, 'keep_alive': 0,
+                'options': {'temperature': 0.65, 'presence_penalty': 0.0, 'num_ctx': 8192, 'num_predict': 6144,
                             'seed': secrets.randbelow(2**31)},
             }, timeout=900) as response:
                 raw = json.load(response)
