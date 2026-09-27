@@ -9,7 +9,7 @@
 <label for="storyTheme">¿De qué querés que trate?</label>
 <input id="storyTheme" maxlength="700" placeholder="Ej.: mi compañero de apartamento me oculta cuánto cuesta el alquiler">
 <div class="row story-controls"><label>Duración de cada parte<select id="storyDur"><option value="30">30 segundos</option><option value="45">45 segundos</option><option value="60">60 segundos</option><option value="90" selected>90 segundos</option><option value="120">120 segundos</option></select></label><button id="generateStory" class="primary" onclick="story()">GENERAR PARTE 1 Y 2</button></div>
-<p class="muted">IA local, sin clave ni API de pago. La primera generación descarga aprox. 2,5 GB; después queda guardada. Puede tardar varios minutos y consume recursos del Codespace. La duración narrada es aproximada.</p>
+<p class="muted">IA local, sin clave ni API de pago. La primera generación descarga aprox. 3,4 GB; después queda guardada. Puede tardar varios minutos y consume recursos del Codespace. La duración narrada es aproximada.</p>
 <div id="storyMsg" role="status" aria-live="polite"></div>
 <div id="storyResult" hidden><h3 id="storyTitle"></h3><div class="two">
 <div><label for="storyPart1">PARTE 1 · El conflicto</label><textarea id="storyPart1" readonly></textarea><small id="part1Words"></small><button onclick="copyStoryPart(1)">COPIAR PARTE 1</button></div>

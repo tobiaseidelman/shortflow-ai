@@ -11,7 +11,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import ProxyHandler, Request, build_opener
 
-MODEL = 'qwen3:4b-instruct-2507-q4_K_M'
+MODEL = 'qwen3.5:4b'
 URL = 'http://127.0.0.1:11434'
 _server = None
 _http = build_opener(ProxyHandler({}))
@@ -21,43 +21,30 @@ SCHEMA = {
     'required': ['title', 'plan', 'part1', 'part2'],
     'additionalProperties': False,
 }
-SYSTEM = '''Sos guionista de relatos ORIGINALES DE FICCIÓN en español natural,
-en primera persona, estilo confesión de Reddit. Escribís una historia en DOS episodios
-con un arco completo de agravio, dignidad y cambio de poder. Los personajes son adultos.
+SYSTEM = '''Escribí ficción original en español: una confesión de Reddit en primera persona,
+con personajes adultos, conflicto cotidiano y una respuesta firme a una injusticia.
+Entregá JSON: title, plan, part1, part2.
 
-PLANIFICÁ AMBAS PARTES ANTES DE ESCRIBIRLAS. En el campo plan, definí brevemente quién
-narra, qué agravio sufrió, qué recurso propio puede retirar o usar, cómo lo anticipás,
-qué enfrentamiento queda pendiente al cortar y qué decisión final cerrará la historia.
-Variá personajes, relaciones, escenarios y recursos. No uses siempre infidelidad o dinero.
-Si el usuario propone un tema, desarrollalo sin repetir una historia de ejemplo.
+Primero planificá el arco completo en plan (máximo 60 palabras): protagonista,
+agravio, aporte subestimado, decisión, enfrentamiento y consecuencia final.
+Usá pocos personajes. Un solo conflicto central. El giro nace de algo que el narrador
+ya hizo o posee: presentalo antes de usarlo. Nada de accidentes, emergencias o personas
+nuevas que aparezcan para resolver el conflicto. Las acciones deben tener causa y efecto.
 
-PARTE 1:
-- Primera frase: un agravio concreto o un diálogo hiriente. Sin presentaciones genéricas.
-- Mostrá la injusticia en una escena y un par de detalles cotidianos significativos.
-- El narrador responde con contención y toma una decisión, no solo describe emociones.
-- Revelá una ventaja o aporte suyo que los demás subestimaron; establecé su origen.
-- Mostrá una primera consecuencia satisfactoria de su decisión.
-- Terminá ANTES del enfrentamiento principal: dejá una reacción, reunión, llamada o
-  decisión concreta pendiente. La última frase debe estar completa y crear una pregunta.
+part1: Abrí con una frase hiriente o una injusticia concreta, mostrá una escena con
+diálogo, explicá el aporte ignorado del narrador y hacé que tome una decisión.
+Terminá cuando esté por enfrentar a la otra persona: una situación concreta pendiente,
+no una pregunta al público ni una frase vaga como «lo cambiaría todo».
 
-PARTE 2:
-- Retomá ese momento con un máximo de una frase de conexión. No resumas toda la parte 1.
-- Mostrá pronto el enfrentamiento prometido, con acciones y diálogos breves.
-- La otra persona intenta negar, presionar o negociar; cambia de táctica al ver que falla.
-- Añadí una dificultad o costo para el narrador: no debe tener poder perfecto e ilimitado.
-- Un último intento de revertir la situación debe poner a prueba su decisión.
-- Cerrá con su elección y una consecuencia concreta. No anuncies parte 3.
-- El cierre debe recuperar un detalle o frase del inicio con un significado distinto.
+part2: Continuá exactamente desde ese momento. Mostrá el enfrentamiento prometido.
+La otra persona intenta justificarse o negociar. El narrador asume un costo, sostiene
+su decisión y obtiene una consecuencia concreta. Cerrá el conflicto, sin parte tres.
+Recuperá un detalle del comienzo con otro significado.
 
-Mantené idénticos los nombres, relaciones, propiedad de recursos, cantidades y plazos.
-Solo contá lo que el narrador vio, escuchó o supo por una fuente que mencionás.
-Usá cifras proporcionadas, motivos comprensibles y consecuencias posibles. No inventes
-fortunas, cláusulas legales milagrosas ni revelaciones sin preparación. No copies tramas
-reales ni digas que lo son. No uses notas misteriosas, sueños ni coincidencias salvadoras.
-Cada párrafo debe añadir un hecho: evitá repetir argumentos, condiciones o explicaciones.
-Sin moralejas, pedidos de likes, marcas de tiempo ni instrucciones de cámara.
-No pegues los rótulos "Parte 1" o "Parte 2" dentro de los textos.
-Devolvé solo JSON con title, plan, part1 y part2. El plan no forma parte de la narración.'''
+Mantené los nombres, parentescos, objetos y hechos entre las dos partes. El narrador
+solo conoce lo que vio, escuchó o le contaron. Diálogos claros: que se sepa quién habla
+y a quién. No copies historias existentes. Sin moralejas, likes ni relleno repetitivo.
+Cada parte debe poder narrarse en voz alta. No incluyas rótulos de partes en el relato.'''
 
 
 
@@ -120,7 +107,7 @@ def ensure_model(storage, progress):
             raise StoryGenerationError('La IA local no respondió al iniciar. Volvé a intentarlo.')
     if any(model.get('name') == MODEL for model in models):
         return
-    progress('Descargando la IA por primera vez (aprox. 2,5 GB). Puede tardar varios minutos…')
+    progress('Descargando la IA por primera vez (aprox. 3,4 GB). Puede tardar varios minutos…')
     try:
         # Stream download progress rather than holding the browser request open.
         with _request('/api/pull', {'model': MODEL, 'stream': True}, timeout=600) as response:
@@ -180,8 +167,8 @@ def generate_story(theme, duration, storage, progress):
         try:
             with _request('/api/generate', {
                 'model': MODEL, 'system': SYSTEM, 'prompt': prompt, 'format': SCHEMA,
-                'stream': False, 'keep_alive': 0,
-                'options': {'temperature': 0.85, 'num_ctx': 4096, 'num_predict': 3200,
+                'stream': False, 'think': False, 'keep_alive': 0,
+                'options': {'temperature': 0.65, 'presence_penalty': 0.0, 'num_ctx': 4096, 'num_predict': 3200,
                             'seed': secrets.randbelow(2**31)},
             }, timeout=900) as response:
                 raw = json.load(response)
