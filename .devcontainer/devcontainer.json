@@ -1,11 +1,12 @@
 {
-  "name": "ShortFlow AI (Python 3.12 + FFmpeg)",
+  "name": "ShortFlow AI (Python 3.12 + FFmpeg + IA local)",
   "build": {"dockerfile": "Dockerfile"},
   "remoteUser": "vscode",
   "postCreateCommand": "python -m venv .venv && .venv/bin/python -m pip install -r requirements-dev.txt",
   "waitFor": "postCreateCommand",
   "forwardPorts": [8000],
   "portsAttributes": {
+    "11434": {"onAutoForward": "ignore"},
     "8000": {"label": "ShortFlow AI", "onAutoForward": "openBrowser", "visibility": "private"}
   },
   "customizations": {

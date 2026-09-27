@@ -14,3 +14,15 @@ class UsedClip(Base):
  __tablename__='used_clips'; id:Mapped[int]=mapped_column(primary_key=True); clip_id:Mapped[int]=mapped_column(ForeignKey('clips.id')); short_id:Mapped[int]=mapped_column(ForeignKey('shorts.id')); position:Mapped[int]=mapped_column(Integer); used_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
 class ImportSource(Base):
  __tablename__='import_sources'; id:Mapped[int]=mapped_column(primary_key=True); url:Mapped[str]=mapped_column(Text); platform:Mapped[str]=mapped_column(String(60)); rights_declared_at:Mapped[datetime]=mapped_column(DateTime); status:Mapped[str]=mapped_column(String(60)); created_at:Mapped[datetime]=mapped_column(DateTime,default=datetime.utcnow)
+
+class StoryGeneration(Base):
+    __tablename__ = 'story_generations'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    theme: Mapped[str] = mapped_column(Text)
+    duration: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String(255), default='')
+    status: Mapped[str] = mapped_column(String(20))
+    message: Mapped[str] = mapped_column(Text, default='')
+    part1_id: Mapped[int | None] = mapped_column(ForeignKey('stories.id'), nullable=True)
+    part2_id: Mapped[int | None] = mapped_column(ForeignKey('stories.id'), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

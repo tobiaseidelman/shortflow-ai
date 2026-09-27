@@ -30,3 +30,9 @@ jobs:
         run: >-
           docker run --rm -v "$PWD:/workspace" -w /workspace shortflow-codespaces
           bash -c 'python -m venv .venv && .venv/bin/python -m pip install -r requirements-dev.txt && .venv/bin/python -m pytest -q'
+      - name: Validate a real local story model (opt-in)
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[model-smoke]'))
+        timeout-minutes: 25
+        run: >-
+          docker run --rm -v "$PWD:/workspace" -w /workspace shortflow-codespaces
+          .venv/bin/python -m scripts.check_story_model

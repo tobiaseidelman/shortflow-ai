@@ -8,10 +8,12 @@ import shutil,json,re,os,subprocess
 from .db import Base,engine,SessionLocal
 from .models import *
 from .video_engine import metadata,analyze,optimize,render
+from .story_routes import router as story_router, lifespan, set_storage
 ROOT=Path(__file__).resolve().parents[1]; STORE=Path(os.getenv('SHORTFLOW_STORAGE_DIR', str(ROOT/'storage'))).expanduser().resolve(); UP=STORE/'uploads'; OUT=STORE/'renders'
 for p in (UP,OUT,STORE/'temp'):p.mkdir(parents=True,exist_ok=True)
 Base.metadata.create_all(engine)
-app=FastAPI(title='ShortFlow AI'); app.mount('/static',StaticFiles(directory=ROOT/'app/static'),name='static'); templates=Jinja2Templates(directory=ROOT/'app/templates')
+set_storage(STORE)
+app=FastAPI(title='ShortFlow AI', lifespan=lifespan); app.include_router(story_router); app.mount('/static',StaticFiles(directory=ROOT/'app/static'),name='static'); templates=Jinja2Templates(directory=ROOT/'app/templates')
 ALLOWED={'.mp4','.mov','.webm'}; MAX=1024*1024*1024
 
 def db(): return SessionLocal()
@@ -59,13 +61,6 @@ def import_url(url:str=Form(...),rights:bool=Form(False)):
  if not rights: raise HTTPException(400,'Tenés que confirmar que contás con autorización para reutilizar el contenido.')
  if not re.match(r'^https?://',url): raise HTTPException(400,'URL inválida.')
  platform='youtube' if 'youtu' in url else 'web'; s=db();x=ImportSource(url=url,platform=platform,rights_declared_at=datetime.utcnow(),status='provider_unavailable');s.add(x);s.commit();s.close();return JSONResponse(status_code=422,content={'detail':'No se pudo importar automáticamente. Subí el archivo MP4 directamente.'})
-STORIES={
-'Drama':'Pensé que era un día normal hasta que encontré una nota escondida en mi mochila. Nadie admitía haberla escrito. Durante todo el recreo intenté descubrir quién sabía mi secreto. Entonces mi mejor amigo dijo una frase que solo una persona podía conocer. Cuando le pregunté cómo lo sabía, se quedó en silencio. Antes de irse me mostró otra nota. Decía que la primera no era para mí.',
-'Mystery':'A las ocho apareció una llave en mi escritorio. No tenía etiqueta y nadie sabía de dónde había salido. Probé cada cajón del salón hasta que uno se abrió. Adentro había una foto vieja con una fecha de mañana. Pensé que era una broma, hasta que reconocí a alguien en el fondo. Cuando di vuelta la foto, había una sola instrucción: no llegues tarde.',
-'School':'Todo empezó cuando cambiaron los lugares del salón. Debajo de mi nueva mesa encontré una lista de nombres, incluido el mío. Cada nombre tenía una hora al lado. Me reí hasta que la primera hora llegó y pasó exactamente lo que estaba escrito. Faltaban diez minutos para la mía. Entonces apareció una segunda lista, pero esta vez mi nombre estaba tachado.'}
-@app.post('/api/stories')
-def story(genre:str=Form('Drama'),duration:int=Form(45)):
- base=STORIES.get(genre,STORIES['Drama']); target=max(55,int(duration*2.3)); words=base.split(); text=' '.join((words*((target//len(words))+1))[:target]); s=db();x=Story(genre=genre,duration_target=duration,title=f'{genre} — {datetime.now():%d/%m %H:%M}',text=text);s.add(x);s.commit();o={'id':x.id,'title':x.title,'text':x.text};s.close();return o
 @app.get('/api/stories')
 def stories():s=db();r=s.query(Story).order_by(Story.id.desc()).all();o=[{'id':x.id,'title':x.title,'genre':x.genre,'duration':x.duration_target,'text':x.text} for x in r];s.close();return o
 @app.post('/api/shorts')
