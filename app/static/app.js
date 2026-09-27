@@ -1,9 +1,52 @@
 let selectedStory=0,selectedShort=0;const $=s=>document.querySelector(s);const pages=['dashboard','fondos','historias','crear','editor','historial','config'];
-function show(id){pages.forEach(x=>$('#'+x).classList.toggle('active',x===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));$('#title').textContent=document.querySelector(`button[data-page="${id}"]`).textContent; if(id==='fondos')loadVideos();if(id==='historias'||id==='crear')loadStories();if(id==='historial')loadShorts()}
+function show(id){pages.forEach(x=>$('#'+x).classList.toggle('active',x===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));$('#title').textContent=document.querySelector(`button[data-page="${id}"]`).textContent; if(id==='fondos'){loadVideos();resumeImport();}if(id==='historias'||id==='crear')loadStories();if(id==='historial')loadShorts()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.page));
 async function upload(){let f=$('#file').files[0];if(!f)return msg('#uploadMsg','Elegí un archivo.','err');let fd=new FormData();fd.append('file',f);msg('#uploadMsg','Subiendo y analizando frames… puede tardar según el video.','loading');try{let r=await fetch('/api/videos/upload',{method:'POST',body:fd}),j=await r.json();if(!r.ok)throw Error(j.detail);msg('#uploadMsg',`Listo: ${j.clips} clips detectados y puntuados.`,'ok');loadVideos()}catch(e){msg('#uploadMsg',e.message,'err')}}
-async function importUrl(){let fd=new FormData();fd.append('url',$('#url').value);fd.append('rights',$('#rights').checked);try{let r=await fetch('/api/import-url',{method:'POST',body:fd}),j=await r.json();if(!r.ok)throw Error(j.detail);msg('#urlMsg','Importado.','ok')}catch(e){msg('#urlMsg',e.message,'err')}}
-async function loadVideos(){let a=await fetch('/api/videos').then(r=>r.json());$('#videos').innerHTML=a.length?`<table class=table><tr><th>Nombre</th><th>Duración</th><th>Resolución</th><th>Estado</th><th>Clips</th></tr>${a.map(v=>`<tr><td>${v.name}</td><td>${v.duration.toFixed(1)}s</td><td>${v.width}×${v.height}</td><td>${v.status}</td><td>${v.clips}</td></tr>`).join('')}</table>`:'<p class=muted>No hay fondos todavía.</p>'}
+let activeImport=null;
+function importMessage(text,kind='loading') {
+  const p=document.createElement('p');p.className=kind;p.textContent=text;$('#urlMsg').replaceChildren(p);
+}
+async function importUrl() {
+  if(activeImport)return;
+  $('#importVideo').disabled=true;
+  importMessage('Preparando la importación…');
+  const data=new FormData();data.append('url',$('#url').value);data.append('rights',$('#rights').checked);
+  try {
+    const job=await storyRequest('/api/import-url',{method:'POST',body:data});
+    await watchImport(job.id);
+  } catch(error){importMessage(error.message,'err');}
+  finally {$('#importVideo').disabled=false;}
+}
+async function watchImport(id) {
+  if(activeImport)return;
+  activeImport=id;$('#importVideo').disabled=true;
+  try {
+    while(true) {
+      const job=await storyRequest('/api/imports/'+encodeURIComponent(id));
+      importMessage(job.message,job.status==='ready'?'ok':job.status==='failed'?'err':'loading');
+      if(job.status!=='running'){if(job.status==='ready')await loadVideos();break;}
+      await new Promise(resolve=>setTimeout(resolve,2000));
+    }
+  } catch(error){importMessage('No se pudo consultar el progreso. Volvé a Fondos para recuperarlo.','err');}
+  finally {activeImport=null;$('#importVideo').disabled=false;}
+}
+async function resumeImport() {
+  if(activeImport)return;
+  try {
+    const jobs=await storyRequest('/api/imports');
+    const running=jobs.find(job=>job.status==='running');
+    if(running)watchImport(running.id);
+    else if(jobs[0])importMessage(jobs[0].message,jobs[0].status==='ready'?'ok':'err');
+  } catch(error){importMessage('No se pudo consultar la última importación.','err');}
+}
+async function loadVideos() {
+  const videos=await storyRequest('/api/videos');const container=$('#videos');container.replaceChildren();
+  if(!videos.length){const p=document.createElement('p');p.textContent='No hay fondos todavía.';container.append(p);return;}
+  const table=document.createElement('table');table.className='table';
+  const header=table.insertRow();['Nombre','Duración','Resolución','Estado','Clips'].forEach(label=>{const cell=document.createElement('th');cell.textContent=label;header.append(cell);});
+  videos.forEach(video=>{const row=table.insertRow();[video.name,video.duration.toFixed(1)+'s',video.width+'×'+video.height,video.status,video.clips].forEach(value=>row.insertCell().textContent=String(value));});
+  container.append(table);
+}
 let activeGeneration = null;
 function storyMessage(text, kind='loading') {
   const p=document.createElement('p');p.className=kind;p.textContent=text;

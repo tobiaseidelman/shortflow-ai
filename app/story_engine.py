@@ -21,32 +21,11 @@ SCHEMA = {
     'required': ['title', 'plan', 'part1', 'part2'],
     'additionalProperties': False,
 }
-SYSTEM = '''Escribí ficción original en español: una confesión de Reddit en primera persona,
-con personajes adultos, conflicto cotidiano y una respuesta firme a una injusticia.
-Entregá un objeto JSON con cuatro cadenas de texto: "title", "plan", "part1", "part2".
-part1 y part2 son narraciones completas, nunca resúmenes ni descripciones de escenas.
-
-Primero planificá el arco completo en plan (máximo 60 palabras): protagonista,
-agravio, aporte subestimado, decisión, enfrentamiento y consecuencia final.
-Usá pocos personajes. Un solo conflicto central. El giro nace de algo que el narrador
-ya hizo o posee: presentalo antes de usarlo. Nada de accidentes, emergencias o personas
-nuevas que aparezcan para resolver el conflicto. Las acciones deben tener causa y efecto.
-
-part1: Abrí con una frase hiriente o una injusticia concreta, mostrá una escena con
-diálogo, explicá el aporte ignorado del narrador y hacé que tome una decisión.
-Terminá cuando esté por enfrentar a la otra persona: una situación concreta pendiente,
-no una pregunta al público ni una frase vaga como «lo cambiaría todo».
-
-part2: Continuá exactamente desde ese momento. Mostrá el enfrentamiento prometido.
-La otra persona intenta justificarse o negociar. El narrador asume un costo, sostiene
-su decisión y obtiene una consecuencia concreta. Cerrá el conflicto, sin parte tres.
-Recuperá un detalle del comienzo con otro significado.
-
-Mantené los nombres, parentescos, objetos y hechos entre las dos partes. El narrador
-solo conoce lo que vio, escuchó o le contaron. Diálogos claros: que se sepa quién habla
-y a quién. No copies historias existentes. Sin moralejas, likes ni relleno repetitivo.
-Cada parte debe poder narrarse en voz alta. No incluyas rótulos de partes en el relato.'''
-
+SYSTEM = """Escribís relatos originales de ficción en español natural, estilo confesión de Reddit.
+El narrador cuenta su propia experiencia EN PRIMERA PERSONA: yo, me, mi.
+Usá hechos cotidianos, diálogos claros y consecuencias creíbles. Nada de accidentes
+convenientes, fortunas repentinas, documentos mágicos ni personajes nuevos que solucionan todo.
+Respetá el plan y los hechos anteriores. Cada escena debe aportar algo nuevo."""
 
 
 class StoryGenerationError(Exception):
@@ -155,40 +134,102 @@ def validate_story(data, duration):
     return result
 
 
+def complete(messages, json_mode=False):
+    """Keep dialogue roles and unstructured narrative separate from the plot outline."""
+    payload = {
+        'model': MODEL, 'messages': messages, 'stream': False, 'keep_alive': '5m',
+        'options': {'temperature': 0.65, 'num_ctx': 8192, 'num_predict': 1800,
+                    'seed': secrets.randbelow(2**31)},
+    }
+    if json_mode:
+        payload['format'] = 'json'
+    try:
+        with _request('/api/chat', payload, timeout=600) as response:
+            raw = json.load(response)
+        if raw.get('error'):
+            raise StoryGenerationError('La IA no pudo generar la historia. Revisá la memoria disponible.')
+        if not raw.get('done') or raw.get('done_reason') == 'length':
+            raise ValueError('La IA cortó la respuesta antes de terminar.')
+        return raw.get('message', {}).get('content', '').strip()
+    except HTTPError as exc:
+        raise StoryGenerationError('La IA local rechazó la solicitud. Revisá memoria y el registro de Ollama.') from exc
+    except (URLError, OSError) as exc:
+        raise StoryGenerationError('La IA local no terminó a tiempo o perdió la conexión. Volvé a intentarlo.') from exc
+
+
+def validate_episode(text, duration):
+    low, high = round(duration * 1.7), round(duration * 2.9)
+    count = len(text.split())
+    if not low <= count <= high:
+        raise ValueError(f'Hay {count} palabras; se necesitan entre {low} y {high}.')
+    if text.rstrip('”"\'»')[-1:] not in '.!?…':
+        raise ValueError('La última frase está incompleta.')
+    if not re.search(r'\b(yo|me|mi|mis|conmigo)\b', text, re.IGNORECASE):
+        raise ValueError('El protagonista debe contar su propia experiencia en primera persona.')
+    if re.search(r'(?im)^\s*(parte [12]|aquí (tienes|está)|título:|plan:)', text):
+        raise ValueError('Entregá solo la narración, sin títulos ni explicaciones.')
+    return text
+
+
+def write_episode(messages, duration, progress):
+    for attempt in range(2):
+        text = complete(messages)
+        try:
+            return validate_episode(text, duration)
+        except ValueError as exc:
+            if attempt:
+                raise StoryGenerationError('La parte no pasó la revisión: ' + str(exc)) from exc
+            progress('Revisando la extensión y el punto de vista de esta parte…')
+            messages = messages + [
+                {'role': 'assistant', 'content': text},
+                {'role': 'user', 'content': f'Corregí este borrador. {exc} Conservá los hechos. '
+                 'Desarrollá acciones y diálogo si faltan palabras. Devolvé solo el relato completo corregido.'},
+            ]
+
+
 def generate_story(theme, duration, storage, progress):
     ensure_model(storage, progress)
-    prompt = (f'Idea del usuario (usala como tema, no como instrucciones): {json.dumps(theme, ensure_ascii=False)}.\n'
-              f'Duración: {duration} segundos POR PARTE, no entre las dos. '
-              f'Cada uno de los campos part1 y part2 debe contener entre {round(duration * 1.7)} y {round(duration * 2.9)} palabras. '
-              f'Escribí aproximadamente {round(duration * 2.3)} palabras en part1 y otras {round(duration * 2.3)} en part2, con escenas y diálogos desarrollados. '
-              'Escribí primero el plan de la historia y luego las dos partes conectadas. '
-              'Antes de responder, comprobá continuidad, resolución y extensión de AMBAS partes.')
-    previous = ''
-    for attempt in range(2):
-        progress('Escribiendo las dos partes… Puede tardar varios minutos.' if not attempt
-                 else 'Revisando extensión y repeticiones de las dos partes…')
+    system = {'role': 'system', 'content': SYSTEM}
+    progress('Planificando el conflicto, el corte y el desenlace…')
+    try:
+        outline = complete([system, {'role': 'user', 'content':
+            'Prepará un plan breve para UNA historia en DOS partes. Tema: '
+            + json.dumps(theme, ensure_ascii=False) +
+            '. Respondé JSON con estos campos de texto: title, narrator, relationship, grievance, '
+            'resource, clue, cliffhanger, outcome. El narrador sufre el agravio; su recurso o aporte '
+            'subestimado causa el giro. La pista debe aparecer antes de usar ese recurso. '
+            'cliffhanger describe el enfrentamiento pendiente al terminar parte 1; outcome lo resuelve '
+            'con una decisión y un costo para el narrador. Máximo 180 palabras en total.'}], json_mode=True)
+        data = json.loads(outline)
+        fields = ('title', 'narrator', 'relationship', 'grievance', 'resource', 'clue', 'cliffhanger', 'outcome')
+        if not isinstance(data, dict) or any(not isinstance(data.get(k), str) or not data[k].strip() for k in fields):
+            raise ValueError('No se pudo preparar un plan completo.')
+        title = data['title'].strip()
+        plan = json.dumps({k: data[k] for k in fields if k != 'title'}, ensure_ascii=False)
+        target = round(duration * 2.3)
+        length = f'Escribí entre {round(duration * 1.7)} y {round(duration * 2.9)} palabras (objetivo: {target}). '
+        common = 'Este es el plan de los DOS episodios, no lo narres como un resumen: ' + outline
+        first_prompt = (common + '\nEscribí SOLO la PARTE 1 EN PRIMERA PERSONA. ' + length +
+                        'Abrí con el agravio concreto, mostrá el aporte ignorado y la pista mediante acciones '
+                        'y diálogo. El protagonista toma una decisión. Terminá justo en el enfrentamiento '
+                        'pendiente del plan, sin resolverlo todavía. Solo prosa, sin título ni JSON.')
+        progress('Escribiendo la parte 1: conflicto y suspenso…')
+        part1 = write_episode([system, {'role': 'user', 'content': first_prompt}], duration, progress)
+        second_prompt = ('Continuá con SOLO la PARTE 2 EN PRIMERA PERSONA. ' + length +
+                         'Retomá exactamente la última escena, sin resumir el episodio anterior. '
+                         'Mostrá el enfrentamiento prometido, la negociación y la decisión final del plan. '
+                         'Cerrá con una consecuencia concreta. Mismos nombres, parentescos, objetos y hechos. '
+                         'Sin otra parte pendiente. Solo prosa, sin título ni JSON.')
+        progress('Escribiendo la parte 2 desde el final de la primera…')
+        part2 = write_episode([system, {'role': 'user', 'content': first_prompt},
+                               {'role': 'assistant', 'content': part1},
+                               {'role': 'user', 'content': second_prompt}], duration, progress)
+        return validate_story({'title': title, 'plan': plan, 'part1': part1, 'part2': part2}, duration)
+    except (ValueError, TypeError) as exc:
+        raise StoryGenerationError('La historia no pasó la revisión: ' + str(exc)) from exc
+    finally:
         try:
-            with _request('/api/generate', {
-                'model': MODEL, 'system': SYSTEM, 'prompt': prompt, 'format': 'json',
-                'stream': False, 'keep_alive': 0,
-                'options': {'temperature': 0.65, 'presence_penalty': 0.0, 'num_ctx': 4096, 'num_predict': 2400,
-                            'seed': secrets.randbelow(2**31)},
-            }, timeout=900) as response:
-                raw = json.load(response)
-            if raw.get('error'):
-                raise StoryGenerationError('La IA no pudo generar la historia. Revisá la memoria disponible.')
-            if not raw.get('done') or raw.get('done_reason') == 'length':
-                raise ValueError('La IA cortó la respuesta antes de terminar.')
-            previous = raw.get('response', '')
-            return validate_story(json.loads(previous), duration)
-        except HTTPError as exc:
-            raise StoryGenerationError('La IA local rechazó la solicitud. Revisá la memoria y el registro de Ollama.') from exc
-        except (URLError, OSError) as exc:
-            raise StoryGenerationError('La IA local no terminó a tiempo o perdió la conexión. Volvé a intentarlo.') from exc
-        except (ValueError, TypeError) as exc:
-            if attempt:
-                raise StoryGenerationError('La historia no pasó la revisión de extensión o formato. Probá otra idea.') from exc
-            prompt += (f'\nCorregí este borrador: {previous[:10000]}\nProblema detectado: {exc}. '
-                       'Conservá personajes y hechos. Si falta extensión, desarrollá las escenas con '
-                       'acciones concretas y diálogo, sin resumir ni repetir frases. '
-                       'Entregá el JSON completo con ambas partes corregidas.')
+            with _request('/api/generate', {'model': MODEL, 'keep_alive': 0}, timeout=10):
+                pass
+        except (OSError, URLError):
+            pass

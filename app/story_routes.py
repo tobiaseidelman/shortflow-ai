@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app):
+    from .import_routes import recover_imports
+    recover_imports()
     # start.sh runs one worker. A restart interrupts in-process jobs, not saved stories.
     with SessionLocal() as session:
         session.query(StoryGeneration).filter(StoryGeneration.status == 'running').update({

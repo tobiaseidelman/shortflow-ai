@@ -1,4 +1,8 @@
+FROM node:22-bookworm-slim AS javascript
 FROM mcr.microsoft.com/devcontainers/python:1-3.12-bookworm
+
+COPY --from=javascript /usr/local/bin/node /usr/local/bin/node
+RUN node --version
 
 # This Python app does not use Yarn. Its inherited apt source has an expired key.
 RUN rm -f /etc/apt/sources.list.d/yarn.list \

@@ -113,34 +113,60 @@ def test_rejects_repeated_or_truncated_story():
         story_engine.validate_story(result, 45)
 
 
-def test_one_local_request_generates_both_parts(tmp_path, monkeypatch):
+def test_plan_then_each_part_shares_story_context(tmp_path, monkeypatch):
     monkeypatch.setattr(story_engine, 'ensure_model', lambda *args: None)
-    seen = []
-    def request(path, payload=None, timeout=10):
-        seen.append((path, payload))
-        return BytesIO(json.dumps({'done': True, 'response': json.dumps(sample_story())}).encode())
-    monkeypatch.setattr(story_engine, '_request', request)
-    assert story_engine.generate_story('Tema propio', 45, tmp_path, lambda m: None) == sample_story()
-    assert len(seen) == 1
-    assert seen[0][0] == '/api/generate'
-    assert seen[0][1]['model'] == story_engine.MODEL
-    assert seen[0][1]['keep_alive'] == 0
-    assert 'Tema propio' in seen[0][1]['prompt']
-    assert 'POR PARTE' in seen[0][1]['prompt']
-    assert seen[0][1]['format'] == 'json'
-    assert 'part1' in seen[0][1]['prompt'] and 'part2' in seen[0][1]['prompt']
-
-
-def test_bad_output_is_retried_once_then_reported(tmp_path, monkeypatch):
-    monkeypatch.setattr(story_engine, 'ensure_model', lambda *args: None)
+    outline = {key: 'Detalle de ' + key for key in ('title', 'narrator', 'relationship', 'grievance', 'resource', 'clue', 'cliffhanger', 'outcome')}
+    result = sample_story()
+    result['part1'] = 'Yo ' + result['part1']
+    result['part2'] = 'Me ' + result['part2']
+    replies = iter([json.dumps(outline), result['part1'], result['part2']])
     calls = []
-    def request(*args, **kwargs):
-        calls.append(args)
-        return BytesIO(b'{"done": true, "response": "{}"}')
+    def request(path, payload=None, timeout=10):
+        calls.append((path, payload))
+        if path == '/api/generate':
+            assert payload['keep_alive'] == 0
+            return BytesIO(b'{}')
+        assert path == '/api/chat'
+        return BytesIO(json.dumps({'done': True, 'message': {'content': next(replies)}}).encode())
     monkeypatch.setattr(story_engine, '_request', request)
+    saved = story_engine.generate_story('Tema propio', 45, tmp_path, lambda m: None)
+    assert saved['part1'] == result['part1'] and saved['part2'] == result['part2']
+    assert len(calls) == 4
+    assert calls[0][1]['format'] == 'json'
+    assert 'format' not in calls[1][1]
+    assert 'Tema propio' in calls[0][1]['messages'][1]['content']
+    second_messages = calls[2][1]['messages']
+    assert second_messages[2] == {'role': 'assistant', 'content': result['part1']}
+    assert outline['outcome'] in second_messages[1]['content']
+
+
+def test_episode_revision_receives_actual_draft(monkeypatch):
+    calls = []
+    good = 'Yo ' + sample_story()['part1']
+    replies = iter(['Yo me fui.', good])
+    def complete(messages):
+        calls.append(messages)
+        return next(replies)
+    monkeypatch.setattr(story_engine, 'complete', complete)
+    assert story_engine.write_episode([{'role': 'user', 'content': 'Tema'}], 45, lambda m: None) == good
+    assert calls[1][-2]['content'] == 'Yo me fui.'
+    assert 'entre' in calls[1][-1]['content']
+
+
+def test_bad_output_is_retried_once_then_reported(monkeypatch):
+    calls = []
+    def complete(messages):
+        calls.append(messages)
+        return 'Yo me fui.'
+    monkeypatch.setattr(story_engine, 'complete', complete)
     with pytest.raises(story_engine.StoryGenerationError, match='revisión'):
-        story_engine.generate_story('Tema', 45, tmp_path, lambda m: None)
+        story_engine.write_episode([], 45, lambda m: None)
     assert len(calls) == 2
+
+
+def test_rejects_third_person_episode():
+    with pytest.raises(ValueError, match='primera persona'):
+        story_engine.validate_episode(sample_story()['part1'], 45)
 
 
 def test_missing_ollama_gives_setup_instructions(tmp_path, monkeypatch):

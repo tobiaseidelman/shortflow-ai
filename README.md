@@ -78,7 +78,7 @@ También se incluye un workflow de GitHub Actions en `.github/workflows/ci.yml` 
 
 ## Alcance actual
 
-El análisis de video, scoring, persistencia de clips, optimización de secuencias y render son locales al entorno. Las historias se generan con IA local mediante Ollama y Qwen3, sin API de pago. Cada generación escribe y guarda dos partes conectadas. El render actual produce solo el fondo: todavía no incorpora voz ni subtítulos, aunque el short pueda quedar vinculado a una historia. Servicios externos de TTS natural o importación autorizada desde plataformas requieren un proveedor/API y credenciales propias; el proyecto no incluye mecanismos para evadir DRM, autenticación ni restricciones de plataformas.
+El análisis de video, scoring, persistencia de clips, optimización de secuencias y render son locales al entorno. Las historias se generan con IA local mediante Ollama y Qwen2.5, sin API de pago. Cada generación escribe y guarda dos partes conectadas. El render actual produce solo el fondo: todavía no incorpora voz ni subtítulos, aunque el short pueda quedar vinculado a una historia. La importación pública de YouTube usa yt-dlp y Node 22, sin claves. El TTS sigue pendiente; el proyecto no incluye mecanismos para evadir DRM, autenticación ni restricciones de plataformas.
 
 ## Estructura
 
@@ -117,7 +117,7 @@ Las rutas predeterminadas de SQLite, plantillas, recursos estáticos y almacenam
 
 **Estado: experimental, pendiente de validación narrativa.** Las 24 pruebas de la aplicación pasan, pero la última prueba real del modelo falló por extensión incluso tras revisar el borrador. También se observaron cambios de punto de vista y problemas de coherencia. La integración está implementada; no se considera lista como generador de calidad validada. No se relajaron las comprobaciones para aceptar relatos incompletos.
 
-En **Historias**, escribí una idea y elegí la duración **de cada parte**. El botón **GENERAR PARTE 1 Y 2** produce una misma historia de ficción en primera persona: conflicto y suspenso en la primera parte; continuación y resolución en la segunda. El modelo primero prepara un plan común: agravio, recurso del protagonista, enfrentamiento pendiente y decisión final. Después escribe ambas partes en una misma solicitud para compartir personajes y hechos. La duración elegible es de 30, 45, 60, 90 o 120 segundos por parte; 90 es el valor inicial. No son publicaciones extraídas de Reddit.
+En **Historias**, escribí una idea y elegí la duración **de cada parte**. El botón **GENERAR PARTE 1 Y 2** produce una misma historia de ficción en primera persona: conflicto y suspenso en la primera parte; continuación y resolución en la segunda. El modelo primero prepara un plan común: agravio, recurso del protagonista, enfrentamiento pendiente y decisión final. Después escribe cada parte como prosa en una solicitud separada: la segunda recibe el plan y el texto exacto de la primera. Cada parte tiene una revisión de extensión, frase final y señales de primera persona; si falla, el modelo recibe el borrador para corregirlo una vez. La duración elegible es de 30, 45, 60, 90 o 120 segundos por parte; 90 es el valor inicial. No son publicaciones extraídas de Reddit.
 
 El motor usa [Qwen2.5 7B](https://ollama.com/library/qwen2.5:7b) mediante [Ollama local](https://docs.ollama.com/faq). No requiere claves, saldo ni una API de pago. La descarga inicial ocupa aproximadamente **4,7 GB**, además del programa Ollama. Se guarda en `storage/ollama/models/`, fuera de Git. En Codespaces consume la cuota de cómputo y almacenamiento del entorno; no significa que Codespaces sea ilimitado o gratuito.
 
@@ -139,3 +139,12 @@ Las pruebas habituales simulan el modelo y no descargan pesos. Para probar gener
 ```
 
 Ese comando descarga el modelo en una carpeta temporal y muestra una historia de ejemplo. En GitHub Actions se ejecuta únicamente al lanzar el workflow manualmente o con un commit que incluya `[model-smoke]`.
+
+
+## Importar fondos de YouTube
+
+En **Fondos**, pegá un enlace de un video público individual de YouTube, confirmá tu autorización para reutilizarlo y pulsá **IMPORTAR VIDEO**. ShortFlow descarga los **primeros 10 minutos**, hasta 720p, y analiza automáticamente los clips antes de mostrarlo en la biblioteca. Podés volver a Fondos para recuperar el progreso. Para elegir otro fragmento, subí un archivo recortado.
+
+Se aceptan videos de hasta dos horas; el archivo importado tiene un límite de 1 GB. No se admiten listas completas ni transmisiones en vivo. La descarga tiene un tiempo máximo de 20 minutos y solo se admite una importación a la vez. Los archivos temporales se eliminan al terminar o fallar. Los datos anteriores se conservan.
+
+El contenedor instala Node 22 y `requirements.txt` incluye `yt-dlp[default]`. Fuera de Codespaces, necesitás Node 22 o superior y FFmpeg en PATH. No se usan cookies ni credenciales: si YouTube exige iniciar sesión, bloquea la conexión o restringe un video, se muestra el motivo y sigue disponible la subida manual. Actualizar yt-dlp puede ser necesario si YouTube cambia.

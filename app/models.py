@@ -26,3 +26,13 @@ class StoryGeneration(Base):
     part1_id: Mapped[int | None] = mapped_column(ForeignKey('stories.id'), nullable=True)
     part2_id: Mapped[int | None] = mapped_column(ForeignKey('stories.id'), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class VideoImportJob(Base):
+    __tablename__ = 'video_import_jobs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    source_id: Mapped[int] = mapped_column(ForeignKey('import_sources.id'))
+    video_id: Mapped[int | None] = mapped_column(ForeignKey('background_videos.id'), nullable=True)
+    status: Mapped[str] = mapped_column(String(20))
+    message: Mapped[str] = mapped_column(Text, default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

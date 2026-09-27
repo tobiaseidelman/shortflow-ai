@@ -8,6 +8,12 @@ from app.story_engine import generate_story, stop_server
 
 
 if __name__ == '__main__':
+    original_complete = story_engine.complete
+    def inspect_call(messages, json_mode=False):
+        response = original_complete(messages, json_mode)
+        print('Respuesta de etapa:', response, flush=True)
+        return response
+    story_engine.complete = inspect_call
     original_validate = story_engine.validate_story
     def inspect_sample(data, duration):
         print('Borrador de prueba:', json.dumps(data, ensure_ascii=False), flush=True)

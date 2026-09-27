@@ -9,11 +9,13 @@ from .db import Base,engine,SessionLocal
 from .models import *
 from .video_engine import metadata,analyze,optimize,render
 from .story_routes import router as story_router, lifespan, set_storage
+from .import_routes import router as import_router, set_storage as set_import_storage
 ROOT=Path(__file__).resolve().parents[1]; STORE=Path(os.getenv('SHORTFLOW_STORAGE_DIR', str(ROOT/'storage'))).expanduser().resolve(); UP=STORE/'uploads'; OUT=STORE/'renders'
 for p in (UP,OUT,STORE/'temp'):p.mkdir(parents=True,exist_ok=True)
 Base.metadata.create_all(engine)
 set_storage(STORE)
-app=FastAPI(title='ShortFlow AI', lifespan=lifespan); app.include_router(story_router); app.mount('/static',StaticFiles(directory=ROOT/'app/static'),name='static'); templates=Jinja2Templates(directory=ROOT/'app/templates')
+set_import_storage(STORE)
+app=FastAPI(title='ShortFlow AI', lifespan=lifespan); app.include_router(story_router); app.include_router(import_router); app.mount('/static',StaticFiles(directory=ROOT/'app/static'),name='static'); templates=Jinja2Templates(directory=ROOT/'app/templates')
 ALLOWED={'.mp4','.mov','.webm'}; MAX=1024*1024*1024
 
 def db(): return SessionLocal()
@@ -56,11 +58,6 @@ def upload(file:UploadFile=File(...)):
   v.status='ready';s.commit();res={'id':v.id,'clips':len(cs),'message':'Video analizado correctamente.'}
  except Exception as e:v.status='failed';s.commit();s.close();raise HTTPException(500,f'Falló el análisis: {str(e)[:180]}')
  s.close();return res
-@app.post('/api/import-url')
-def import_url(url:str=Form(...),rights:bool=Form(False)):
- if not rights: raise HTTPException(400,'Tenés que confirmar que contás con autorización para reutilizar el contenido.')
- if not re.match(r'^https?://',url): raise HTTPException(400,'URL inválida.')
- platform='youtube' if 'youtu' in url else 'web'; s=db();x=ImportSource(url=url,platform=platform,rights_declared_at=datetime.utcnow(),status='provider_unavailable');s.add(x);s.commit();s.close();return JSONResponse(status_code=422,content={'detail':'No se pudo importar automáticamente. Subí el archivo MP4 directamente.'})
 @app.get('/api/stories')
 def stories():s=db();r=s.query(Story).order_by(Story.id.desc()).all();o=[{'id':x.id,'title':x.title,'genre':x.genre,'duration':x.duration_target,'text':x.text} for x in r];s.close();return o
 @app.post('/api/shorts')
