@@ -163,6 +163,7 @@ def generate_story(theme, duration, storage, progress):
               f'Escribí aproximadamente {round(duration * 2.3)} palabras en part1 y otras {round(duration * 2.3)} en part2, con escenas y diálogos desarrollados. '
               'Escribí primero el plan de la historia y luego las dos partes conectadas. '
               'Antes de responder, comprobá continuidad, resolución y extensión de AMBAS partes.')
+    previous = ''
     for attempt in range(2):
         progress('Escribiendo las dos partes… Puede tardar varios minutos.' if not attempt
                  else 'Revisando extensión y repeticiones de las dos partes…')
@@ -178,7 +179,8 @@ def generate_story(theme, duration, storage, progress):
                 raise StoryGenerationError('La IA no pudo generar la historia. Revisá la memoria disponible.')
             if not raw.get('done') or raw.get('done_reason') == 'length':
                 raise ValueError('La IA cortó la respuesta antes de terminar.')
-            return validate_story(json.loads(raw.get('response', '')), duration)
+            previous = raw.get('response', '')
+            return validate_story(json.loads(previous), duration)
         except HTTPError as exc:
             raise StoryGenerationError('La IA local rechazó la solicitud. Revisá la memoria y el registro de Ollama.') from exc
         except (URLError, OSError) as exc:
@@ -186,4 +188,7 @@ def generate_story(theme, duration, storage, progress):
         except (ValueError, TypeError) as exc:
             if attempt:
                 raise StoryGenerationError('La historia no pasó la revisión de extensión o formato. Probá otra idea.') from exc
-            prompt += f'\nEl intento anterior falló: {exc}. Reescribí ambas partes respetando esos límites.'
+            prompt += (f'\nCorregí este borrador: {previous[:10000]}\nProblema detectado: {exc}. '
+                       'Conservá personajes y hechos. Si falta extensión, desarrollá las escenas con '
+                       'acciones concretas y diálogo, sin resumir ni repetir frases. '
+                       'Entregá el JSON completo con ambas partes corregidas.')

@@ -3,10 +3,16 @@ import json
 from pathlib import Path
 import tempfile
 
+from app import story_engine
 from app.story_engine import generate_story, stop_server
 
 
 if __name__ == '__main__':
+    original_validate = story_engine.validate_story
+    def inspect_sample(data, duration):
+        print('Borrador de prueba:', json.dumps(data, ensure_ascii=False), flush=True)
+        return original_validate(data, duration)
+    story_engine.validate_story = inspect_sample
     try:
         with tempfile.TemporaryDirectory(prefix='shortflow-model-') as storage:
             result = generate_story(
