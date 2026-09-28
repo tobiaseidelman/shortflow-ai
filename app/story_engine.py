@@ -212,10 +212,17 @@ def write_episode(messages, duration, progress):
                 instruction = f'Ampliá el texto a unas {target} palabras desarrollando acciones y diálogo, sin repetir hechos.'
             else:
                 instruction = 'Corregí el punto de vista o la frase incompleta sin cambiar los hechos ni extender el texto.'
-            messages = messages + [
+            # A fresh editing request prevents the model from rewriting both
+            # episodes when only the second draft needs shortening.
+            messages = [
+                {'role': 'system', 'content':
+                 'Sos editor de una narración en español. Corregí únicamente el texto recibido. '
+                 'Conservá personajes, hechos, primera persona y última escena. '
+                 'No agregues introducciones, episodios anteriores ni comentarios.'},
                 {'role': 'assistant', 'content': text},
-                {'role': 'user', 'content': f'Corregí este borrador. {exc} {instruction} Devolvé solo el relato completo corregido.'},
+                {'role': 'user', 'content': f'Corregí únicamente este borrador. {exc} {instruction} Devolvé solo este episodio corregido.'},
             ]
+
 
 
 def generate_story(theme, duration, storage, progress):

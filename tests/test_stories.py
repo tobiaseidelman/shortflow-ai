@@ -148,7 +148,8 @@ def test_episode_revision_receives_actual_draft(monkeypatch):
         calls.append(messages)
         return next(replies)
     monkeypatch.setattr(story_engine, 'complete', complete)
-    assert story_engine.write_episode([{'role': 'user', 'content': 'Tema'}], 45, lambda m: None) == good
+    assert story_engine.write_episode([{'role': 'user', 'content': 'Tema'}, {'role': 'assistant', 'content': 'Episodio anterior que no hay que reescribir.'}], 45, lambda m: None) == good
+    assert all('Episodio anterior que no hay que reescribir.' not in m['content'] for m in calls[1])
     assert calls[1][-2]['content'] == 'Yo me fui.'
     assert 'entre' in calls[1][-1]['content']
 

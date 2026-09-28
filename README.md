@@ -1,6 +1,6 @@
 # ShortFlow AI — GitHub Codespaces ready
 
-ShortFlow AI es un MVP web para analizar videos largos, crear candidatos de clips de fondo de aproximadamente 4–8 segundos, calcular Hook Score y attention curves, optimizar secuencias con anti-repetición y renderizar video vertical 9:16 con FFmpeg.
+ShortFlow AI crea dos videos verticales de una misma historia: parte 1 con suspenso y parte 2 con desenlace. Permite importar fondos, generar y editar relatos, agregar voz en español y subtítulos, y descargar ambos MP4. La generación de texto y voz se ejecuta dentro del entorno, sin una API de pago.
 
 ## La forma más fácil: GitHub Codespaces
 
@@ -12,7 +12,7 @@ No necesitás instalar Python ni FFmpeg en tu Mac.
 4. En la terminal ejecutá `bash start.sh`.
 5. Cuando aparezca la notificación del puerto `8000`, elegí **Open in Browser**.
 
-Si ya tenías un Codespace anterior, ejecutá **Codespaces: Rebuild Container** desde la paleta de comandos para aplicar esta configuración.
+Si ya tenías un Codespace anterior, detené el servidor con `Ctrl+C`, guardá tus cambios y ejecutá `git pull --ff-only`. Después abrí la paleta con `F1`, elegí **Codespaces: Rebuild Container**, esperá la instalación y ejecutá `bash start.sh`. Recargá la página de la aplicación para cargar los nuevos botones.
 
 Si el navegador no se abre solo, en Codespaces abrí la pestaña **Ports** y hacé clic en el enlace correspondiente al puerto `8000`.
 
@@ -78,7 +78,7 @@ También se incluye un workflow de GitHub Actions en `.github/workflows/ci.yml` 
 
 ## Alcance actual
 
-El análisis de video, scoring, persistencia de clips, optimización de secuencias y render son locales al entorno. Las historias se generan con IA local mediante Ollama y Qwen2.5, sin API de pago. Cada generación escribe y guarda dos partes conectadas. El render de historias incorpora voz local Piper y subtítulos sobre un fondo vertical. También se puede generar un fondo sin historia. La importación pública de YouTube usa yt-dlp y Node 22, sin claves. el proyecto no incluye mecanismos para evadir DRM, autenticación ni restricciones de plataformas.
+El análisis de video, scoring, persistencia de clips, optimización de secuencias y render son locales al entorno. Las historias se generan con IA local mediante Ollama y Qwen2.5, sin API de pago. Cada generación escribe y guarda dos partes conectadas. El render de historias incorpora voz local Piper y subtítulos sobre un fondo vertical. También se puede generar un fondo sin historia. La importación pública de YouTube usa yt-dlp y Node 22, sin claves. El proyecto no incluye mecanismos para evadir DRM, autenticación ni restricciones de plataformas.
 
 ## Estructura
 
@@ -124,7 +124,7 @@ El motor usa [Qwen2.5 7B](https://ollama.com/library/qwen2.5:7b) mediante [Ollam
 - **Codespace existente:** guardá tu trabajo, actualizá la rama con `git pull --ff-only` y ejecutá **Codespaces: Rebuild Container**. Luego `bash start.sh`.
 - **Codespace nuevo:** Ollama se instala con el contenedor. La primera generación descarga el modelo y muestra su progreso; las siguientes reutilizan esa descarga.
 - **Fuera de Codespaces:** instalá [Ollama](https://ollama.com/download) en la misma máquina donde se ejecuta ShortFlow. La aplicación utiliza únicamente `127.0.0.1:11434`. No hace falta publicar ese puerto.
-- Prevé varios minutos de generación en CPU y suficiente memoria libre para un modelo de 7B; el tiempo depende del equipo. Evitá renderizar video mientras genera historias si falta memoria. El modelo se descarga de memoria al terminar.
+- Prevé varios minutos de generación en CPU y suficiente memoria libre para un modelo de 7B; el tiempo depende del equipo. La aplicación impide iniciar un render narrado y una generación de historias al mismo tiempo. El modelo se descarga de memoria al terminar.
 
 La pantalla muestra progreso y puede recuperarlo al volver a **Historias**. Solo se permite una generación a la vez. Reiniciar el servidor interrumpe el trabajo activo y muestra un mensaje para reintentarlo; las historias ya guardadas se conservan. El despliegue actual usa un único proceso de Uvicorn, como `start.sh`.
 
