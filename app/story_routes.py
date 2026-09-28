@@ -1,7 +1,7 @@
 """Durable paired-story jobs, separate from existing stories and videos."""
 from contextlib import asynccontextmanager
 import logging
-from threading import Lock
+from .work_lock import compute_lock
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
@@ -10,7 +10,7 @@ from .models import Story, StoryGeneration
 from . import story_engine
 
 router = APIRouter()
-_generation_lock = Lock()
+_generation_lock = compute_lock
 _storage = None
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def create_story(background_tasks: BackgroundTasks, theme: str = Form('', max_le
     if duration not in (30, 45, 60, 90, 120):
         raise HTTPException(422, 'Elegí 30, 45, 60, 90 o 120 segundos por parte.')
     if not _generation_lock.acquire(blocking=False):
-        raise HTTPException(409, 'Ya se está generando una historia. Esperá a que termine.')
+        raise HTTPException(409, 'Ya hay una historia o video generándose. Esperá a que termine.')
     try:
         with SessionLocal() as session:
             job = StoryGeneration(id=str(uuid4()), theme=theme.strip() or

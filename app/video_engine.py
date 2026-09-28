@@ -6,15 +6,19 @@ def metadata(path):
  cap=cv2.VideoCapture(str(path)); fps=cap.get(cv2.CAP_PROP_FPS) or 30; frames=cap.get(cv2.CAP_PROP_FRAME_COUNT); w=int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)); h=int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)); cap.release(); return {'fps':fps,'duration':frames/fps if fps else 0,'width':w,'height':h}
 
 def _sample(path, step=.35):
- cap=cv2.VideoCapture(str(path)); fps=cap.get(cv2.CAP_PROP_FPS) or 30; dur=(cap.get(cv2.CAP_PROP_FRAME_COUNT)/fps); out=[]; prev=None; t=0.0
- while t<dur:
-  cap.set(cv2.CAP_PROP_POS_MSEC,t*1000); ok,f=cap.read()
-  if not ok: break
+ cap=cv2.VideoCapture(str(path)); fps=cap.get(cv2.CAP_PROP_FPS) or 30; out=[]; prev=None
+ stride=max(1,round(fps*step)); frame=-1
+ while cap.grab():
+  frame+=1
+  if frame%stride: continue
+  ok,f=cap.retrieve()
+  if not ok: continue
+  t=frame/fps
   g=cv2.resize(cv2.cvtColor(f,cv2.COLOR_BGR2GRAY),(160,90)); lap=cv2.Laplacian(g,cv2.CV_64F).var();
   if prev is None: motion=change=0
   else:
    diff=cv2.absdiff(g,prev); change=float(diff.mean()); flow=cv2.calcOpticalFlowFarneback(prev,g,None,.5,2,12,2,5,1.1,0); motion=float(np.linalg.norm(flow,axis=2).mean())
-  out.append((t,motion,change,float(lap))); prev=g; t+=step
+  out.append((t,motion,change,float(lap))); prev=g
  cap.release(); return out
 
 def analyze(path):

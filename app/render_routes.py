@@ -2,7 +2,7 @@
 import json
 import logging
 from pathlib import Path
-from threading import Lock
+from .work_lock import compute_lock
 from uuid import uuid4
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
 from .db import SessionLocal
@@ -11,7 +11,7 @@ from . import narration
 from .video_engine import optimize, render
 
 router = APIRouter()
-_lock = Lock()
+_lock = compute_lock
 _storage = None
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def create_job(tasks: BackgroundTasks, story_id: int = Form(0), generation_id: s
     if bool(story_id) == bool(generation_id):
         raise HTTPException(400, 'Elegí una historia o un par de partes.')
     if not _lock.acquire(blocking=False):
-        raise HTTPException(409, 'Ya hay videos generándose. Esperá a que terminen.')
+        raise HTTPException(409, 'Ya hay una historia o video generándose. Esperá a que termine.')
     try:
         with SessionLocal() as session:
             if not session.query(Clip).first():

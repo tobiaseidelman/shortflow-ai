@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app import render_routes, narration
 from app.db import SessionLocal
-from app.models import Story, StoryGeneration, NarrationAsset, Short, RenderJob
+from app.models import BackgroundVideo, Clip, Story, StoryGeneration, NarrationAsset, Short, RenderJob
 from app.video_engine import optimize, metadata
 
 
@@ -77,7 +77,16 @@ def test_render_failure_releases_lock_and_is_retryable(monkeypatch):
     def fail(*args):raise ValueError('Fallo controlado')
     monkeypatch.setattr(narration,'narrate',fail)
     with TestClient(app) as client:
-        r=client.post('/api/render-jobs',data={'generation_id':'render-pair'})
+        with SessionLocal() as session:
+            story=Story(title='Failure test',text='Yo revisé el texto.',genre='Reddit',duration_target=30)
+            video=BackgroundVideo(name='Test',path='/unused',status='ready')
+            session.add_all([story,video]);session.flush()
+            sid=story.id
+            session.add(Clip(source_video_id=video.id,start_time=0,end_time=4,duration=4,
+                             motion_score=0,visual_change_score=0,action_onset=0,quality_score=0,
+                             hook_score=0,loop_score=0))
+            session.commit()
+        r=client.post('/api/render-jobs',data={'story_id':sid})
         assert r.status_code==202
         job=client.get('/api/render-jobs/'+r.json()['id']).json()
         assert job['status']=='failed' and job['message']=='Fallo controlado'

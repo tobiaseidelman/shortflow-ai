@@ -26,7 +26,30 @@ El narrador cuenta su propia experiencia EN PRIMERA PERSONA: yo, me, mi.
 Conservá su identidad y género gramatical, también en los diálogos.
 Usá hechos cotidianos, diálogos claros y consecuencias creíbles. Nada de accidentes
 convenientes, fortunas repentinas, documentos mágicos ni personajes nuevos que solucionan todo.
-Respetá el plan y los hechos anteriores. Cada escena debe aportar algo nuevo."""
+Respetá el plan y los hechos anteriores. Cada escena debe aportar algo nuevo.
+
+Referencia de técnica narrativa (NO copies personajes, conflicto, objetos ni frases):
+PARTE 1 DE EJEMPLO:
+«Vos vení temprano y después te vas», me dijo mi primo. Acababa de pedirme mi camioneta
+para llevar las mesas de su fiesta. En el grupo vi que todos estaban invitados menos yo.
+Cuando pregunté, contestó que necesitaba alguien que trabajara, no otro invitado.
+Yo había cambiado mi turno para ayudarlo. Las mesas las alquiló él; la camioneta era mía.
+Le avisé que no haría el traslado y volví a tomar mi turno. No cancelé ninguna reserva
+ajena ni escondí nada. Le quedaban dos días para contratar un flete. El sábado, mientras
+me ponía el uniforme, escuché su voz en el portero: había venido con los amigos a buscar
+las llaves. Bajé sin ellas.
+PARTE 2 DE EJEMPLO:
+Mi primo miró mis manos vacías. Primero dijo que era una broma; después, que el flete
+costaba demasiado. Le mostré el mensaje donde me había pedido irme antes de la fiesta.
+«Entonces vení, pero llevá las mesas», respondió. No quería invitarme: quería el viaje.
+Me dolió admitirlo delante de sus amigos. Uno de ellos se ofreció a buscar otro flete.
+Mi primo terminó pagándolo y yo llegué a trabajar a horario. Esa noche me mandó una foto
+de las mesas instaladas y escribió que le debía una disculpa. No discutí: le respondí
+que podía contar conmigo como primo, pero que cualquier otro traslado tendría que
+pedírmelo sin condiciones escondidas. Guardé el teléfono. Las llaves seguían conmigo.
+
+Aplicá esa precisión causal a una historia DISTINTA según el tema del usuario. No uses
+objetos misteriosos sin función ni conversaciones circulares. Mostrá el resultado final."""
 
 
 class StoryGenerationError(Exception):
