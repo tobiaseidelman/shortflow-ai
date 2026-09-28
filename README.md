@@ -161,4 +161,4 @@ La voz [Piper](https://github.com/OHF-Voice/piper1-gpl) `es_MX-ald-medium` se de
 
 La duración final sigue el audio, no recorta la narración al tiempo estimado. Los subtítulos se alinean por frase; los grupos de hasta tres palabras usan tiempos estimados dentro de la frase. **Regenerar fondo** conserva el audio y los subtítulos originales aunque hayas editado después la historia. Para aplicar cambios de texto, generá un video nuevo.
 
-Hay una generación narrada activa a la vez. Si se reinicia el servidor, el trabajo interrumpido se marca como fallido y puede reintentarse. Si solo llegó a terminar la primera parte, su descarga sigue disponible. Los renders usan carpetas temporales separadas y los fondos se repiten cuando no alcanzan para cubrir toda la voz.
+Hay una tarea pesada de historias o videos activa a la vez para evitar agotar la memoria. Si se reinicia el servidor, el trabajo interrumpido se marca como fallido y puede reintentarse. Si solo llegó a terminar la primera parte, su descarga sigue disponible. Los renders usan carpetas temporales separadas y los fondos se repiten cuando no alcanzan para cubrir toda la voz.
