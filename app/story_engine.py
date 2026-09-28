@@ -204,10 +204,17 @@ def write_episode(messages, duration, progress):
             if attempt:
                 raise StoryGenerationError('La parte no pasó la revisión: ' + str(exc)) from exc
             progress('Revisando la extensión y el punto de vista de esta parte…')
+            count = len(text.split())
+            target = round(duration * 2.3)
+            if count > round(duration * 2.9):
+                instruction = f'Recortá el texto a unas {target} palabras. Eliminá conversaciones repetidas y detalles secundarios; no agregues escenas. Conservá el desenlace.'
+            elif count < round(duration * 1.7):
+                instruction = f'Ampliá el texto a unas {target} palabras desarrollando acciones y diálogo, sin repetir hechos.'
+            else:
+                instruction = 'Corregí el punto de vista o la frase incompleta sin cambiar los hechos ni extender el texto.'
             messages = messages + [
                 {'role': 'assistant', 'content': text},
-                {'role': 'user', 'content': f'Corregí este borrador. {exc} Conservá los hechos. '
-                 'Desarrollá acciones y diálogo si faltan palabras. Devolvé solo el relato completo corregido.'},
+                {'role': 'user', 'content': f'Corregí este borrador. {exc} {instruction} Devolvé solo el relato completo corregido.'},
             ]
 
 

@@ -1,5 +1,6 @@
 """Opt-in real-model check: downloads ~4.7 GB, never calls a paid API."""
 import json
+import sys
 from pathlib import Path
 import tempfile
 
@@ -8,6 +9,9 @@ from app.story_engine import generate_story, stop_server
 
 
 if __name__ == '__main__':
+    if '--gemma' in sys.argv:
+        story_engine.MODEL = 'gemma3:4b'
+    print('Modelo en prueba:', story_engine.MODEL, flush=True)
     original_complete = story_engine.complete
     def inspect_call(messages, json_mode=False):
         response = original_complete(messages, json_mode)

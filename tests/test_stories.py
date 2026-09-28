@@ -196,3 +196,16 @@ def test_download_stream_reports_progress(tmp_path, monkeypatch):
     messages = []
     story_engine.ensure_model(tmp_path, messages.append)
     assert any('50%' in m for m in messages)
+
+
+def test_overlong_episode_is_shortened_not_expanded(monkeypatch):
+    messages_seen=[]
+    good='Yo '+sample_story()['part1']
+    replies=iter(['Yo '+('palabra '*180)+'.', good])
+    def complete(messages):
+        messages_seen.append(messages)
+        return next(replies)
+    monkeypatch.setattr(story_engine, 'complete', complete)
+    assert story_engine.write_episode([],45,lambda m:None)==good
+    assert 'Recortá' in messages_seen[1][-1]['content']
+    assert 'no agregues escenas' in messages_seen[1][-1]['content']
