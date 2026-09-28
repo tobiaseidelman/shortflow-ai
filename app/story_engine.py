@@ -223,17 +223,30 @@ def generate_story(theme, duration, storage, progress):
     system = {'role': 'system', 'content': SYSTEM}
     progress('Planificando el conflicto, el corte y el desenlace…')
     try:
-        outline = complete([system, {'role': 'user', 'content':
-            'Prepará un plan breve para UNA historia en DOS partes. Tema: '
-            + json.dumps(theme, ensure_ascii=False) +
-            '. Respondé JSON con estos campos de texto: title, narrator, relationship, grievance, '
-            'resource, clue, cliffhanger, outcome. El narrador sufre el agravio; su recurso o aporte '
-            'subestimado causa el giro. La pista debe aparecer antes de usar ese recurso. '
-            'cliffhanger describe el enfrentamiento pendiente al terminar parte 1; outcome lo resuelve '
-            'con un HECHO FINAL YA OCURRIDO y un costo para el narrador. No alcanza con prometer hablar, '
-            'revelar información o esperar colaboración. Elegí un aporte concreto (horas de trabajo, '
-            'reserva, herramientas, acceso, pago), no el vago conocimiento de preferencias. '
-            'El giro cambia una decisión real. El título debe referirse a ese conflicto. Máximo 180 palabras en total.'}], json_mode=True)
+        # Planning has its own brief instruction: a prose example can distract a
+        # small model into copying objects or inventing unrelated twists.
+        planner = {'role': 'system', 'content':
+            'Sos guionista de relatos cotidianos. Diseñá una sola cadena de causa y efecto, '
+            'con dos protagonistas adultos y un conflicto fácil de entender. '
+            'No escribas prosa todavía. Respondé solo el JSON solicitado.'}
+        outline = complete([planner, {'role': 'user', 'content':
+            'Tema del relato: ' + json.dumps(theme, ensure_ascii=False) +
+            '. El protagonista cuenta lo que LE pasó. Alguien lo menosprecia, pero sigue '
+            'necesitando un aporte concreto suyo. El protagonista pone un límite razonable, '
+            'avisa antes y deja de hacer ese favor. La otra persona intenta convencerlo; '
+            'él sostiene el límite y vemos qué tuvo que hacer la otra persona en su lugar. '
+            'El giro consiste en descubrir ese aporte subestimado, no en un objeto misterioso. '
+            'No uses listas de invitados, flores ni preferencias de decoración como recurso. '
+            'Sin sabotajes, castigos desproporcionados ni nuevos conflictos al final. '
+            'Usá estos ocho campos JSON de texto, máximo una oración breve por campo: '
+            'title (título), narrator (nombre y género del protagonista), relationship '
+            '(nombre y relación de la otra persona), grievance (agravio concreto), '
+            'resource (qué favor o trabajo controla legítimamente el protagonista), '
+            'clue (acción temprana que muestra quién hace ese trabajo), cliffhanger '
+            '(la otra persona llega a reclamar ese favor al final de la parte 1), '
+            'outcome (qué solución alternativa pagó o hizo la otra persona tras el NO definitivo). '
+            'Todos los campos deben tratar del MISMO aporte. Si fue excluido de un evento, '
+            'el protagonista no asiste de pronto a él. Máximo 150 palabras en total.'}], json_mode=True)
         data = json.loads(outline)
         fields = ('title', 'narrator', 'relationship', 'grievance', 'resource', 'clue', 'cliffhanger', 'outcome')
         if not isinstance(data, dict) or any(not isinstance(data.get(k), str) or not data[k].strip() for k in fields):
