@@ -60,13 +60,18 @@ def analyze(path):
 def optimize(clips, required, generation_no=0, weights=None):
  weights=weights or {'hook':.28,'motion':.20,'change':.14,'quality':.10,'novelty':.16,'position':.12}
  if not clips: raise ValueError('No hay clips disponibles')
- slots=max(1,math.ceil(required/6)); beam=[([],0.0,0.0)]
+ clips=[c for c in clips if c.duration > 0]
+ if not clips: raise ValueError('No hay clips válidos')
+ slots=max(1,math.ceil(required/min(c.duration for c in clips))); beam=[([],0.0,0.0)]
  for pos in range(slots):
+  if all(total >= required for _,_,total in beam): break
   nxt=[]
   for seq,score,total in beam:
    recent=seq[-3:]; groups={c.similarity_group for c in recent}; sources={c.source_video_id for c in recent}
-   for c in clips:
-    if c in recent: continue
+   candidates=[c for c in clips if c not in recent] or [c for c in clips if not recent or c != recent[-1]] or clips
+   if total >= required:
+    nxt.append((seq,score,total)); continue
+   for c in candidates:
     novelty=max(0,100-c.times_used*12); position=c.hook_score if pos==0 else (c.motion_score if pos%3 else c.visual_change_score)
     penalty=(35 if c.similarity_group in groups else 0)+(18 if c.source_video_id in sources else 0)+(50 if c.cooldown_until>generation_no else 0)
     s=weights['hook']*(c.hook_score if pos==0 else c.hook_score*.35)+weights['motion']*c.motion_score+weights['change']*c.visual_change_score+weights['quality']*c.quality_score+weights['novelty']*novelty+weights['position']*position-penalty
@@ -75,12 +80,21 @@ def optimize(clips, required, generation_no=0, weights=None):
  best=max(beam,key=lambda x:x[1]+min(x[2],required)*2); return best[0]
 
 def render(sequence, video_paths, output, duration, subtitles=None):
- tmp=Path(output).parent/'temp_render'; tmp.mkdir(exist_ok=True); pieces=[]; remaining=duration
- for i,c in enumerate(sequence):
-  take=min(c.duration,remaining); src=video_paths[c.source_video_id]; p=tmp/f'p{i}.mp4'
-  vf="scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30"
-  cmd=['ffmpeg','-y','-ss',str(c.start_time),'-i',str(src),'-t',str(take),'-an','-vf',vf,'-c:v','libx264','-preset','veryfast','-pix_fmt','yuv420p',str(p)]
-  subprocess.run(cmd,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,check=True); pieces.append(p); remaining-=take
-  if remaining<=.05: break
- lst=tmp/'concat.txt'; lst.write_text('\n'.join("file '"+str(p).replace("'","'\\''")+"'" for p in pieces)); subprocess.run(['ffmpeg','-y','-f','concat','-safe','0','-i',str(lst),'-t',str(duration),'-c','copy',str(output)],stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,check=True)
+ from tempfile import TemporaryDirectory
+ from itertools import cycle
+ if not sequence or duration <= 0 or duration > 600: raise ValueError('Secuencia o duración inválida')
+ output=Path(output).resolve()
+ with TemporaryDirectory(prefix='render-',dir=output.parent) as folder:
+  tmp=Path(folder); pieces=[]; remaining=duration
+  for i,c in enumerate(cycle(sequence)):
+   if c.duration <= 0: raise ValueError('Clip vacío')
+   take=min(c.duration,remaining); p=tmp/f'p{i}.mp4'
+   vf='scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30'
+   subprocess.run(['ffmpeg','-nostdin','-y','-v','error','-ss',str(c.start_time),'-i',str(video_paths[c.source_video_id]),'-t',str(take),'-an','-vf',vf,'-c:v','libx264','-preset','veryfast','-threads','2','-pix_fmt','yuv420p',str(p)],capture_output=True,check=True,timeout=600)
+   pieces.append(p); remaining-=take
+   if remaining<=.001: break
+  lst=tmp/'concat.txt'; lst.write_text('\n'.join("file '"+p.name+"'" for p in pieces))
+  result=tmp/'joined.mp4'
+  subprocess.run(['ffmpeg','-nostdin','-y','-v','error','-f','concat','-safe','0','-i',str(lst),'-t',str(duration),'-c','copy','-movflags','+faststart',str(result)],capture_output=True,check=True,timeout=600)
+  result.replace(output)
  return output

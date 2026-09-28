@@ -78,7 +78,7 @@ También se incluye un workflow de GitHub Actions en `.github/workflows/ci.yml` 
 
 ## Alcance actual
 
-El análisis de video, scoring, persistencia de clips, optimización de secuencias y render son locales al entorno. Las historias se generan con IA local mediante Ollama y Qwen2.5, sin API de pago. Cada generación escribe y guarda dos partes conectadas. El render actual produce solo el fondo: todavía no incorpora voz ni subtítulos, aunque el short pueda quedar vinculado a una historia. La importación pública de YouTube usa yt-dlp y Node 22, sin claves. El TTS sigue pendiente; el proyecto no incluye mecanismos para evadir DRM, autenticación ni restricciones de plataformas.
+El análisis de video, scoring, persistencia de clips, optimización de secuencias y render son locales al entorno. Las historias se generan con IA local mediante Ollama y Qwen2.5, sin API de pago. Cada generación escribe y guarda dos partes conectadas. El render de historias incorpora voz local Piper y subtítulos sobre un fondo vertical. También se puede generar un fondo sin historia. La importación pública de YouTube usa yt-dlp y Node 22, sin claves. el proyecto no incluye mecanismos para evadir DRM, autenticación ni restricciones de plataformas.
 
 ## Estructura
 
@@ -115,7 +115,7 @@ Las rutas predeterminadas de SQLite, plantillas, recursos estáticos y almacenam
 
 ## Historias tipo Reddit: parte 1 y parte 2
 
-**Estado: experimental, pendiente de validación narrativa.** Las 24 pruebas de la aplicación pasan, pero la última prueba real del modelo falló por extensión incluso tras revisar el borrador. También se observaron cambios de punto de vista y problemas de coherencia. La integración está implementada; no se considera lista como generador de calidad validada. No se relajaron las comprobaciones para aceptar relatos incompletos.
+El generador crea borradores originales: revisá personajes, coherencia y desenlace antes de publicar. Los textos se pueden editar y guardar dentro de ShortFlow.
 
 En **Historias**, escribí una idea y elegí la duración **de cada parte**. El botón **GENERAR PARTE 1 Y 2** produce una misma historia de ficción en primera persona: conflicto y suspenso en la primera parte; continuación y resolución en la segunda. El modelo primero prepara un plan común: agravio, recurso del protagonista, enfrentamiento pendiente y decisión final. Después escribe cada parte como prosa en una solicitud separada: la segunda recibe el plan y el texto exacto de la primera. Cada parte tiene una revisión de extensión, frase final y señales de primera persona; si falla, el modelo recibe el borrador para corregirlo una vez. La duración elegible es de 30, 45, 60, 90 o 120 segundos por parte; 90 es el valor inicial. No son publicaciones extraídas de Reddit.
 
@@ -128,7 +128,7 @@ El motor usa [Qwen2.5 7B](https://ollama.com/library/qwen2.5:7b) mediante [Ollam
 
 La pantalla muestra progreso y puede recuperarlo al volver a **Historias**. Solo se permite una generación a la vez. Reiniciar el servidor interrumpe el trabajo activo y muestra un mensaje para reintentarlo; las historias ya guardadas se conservan. El despliegue actual usa un único proceso de Uvicorn, como `start.sh`.
 
-Las dos partes se guardan en una transacción, vinculadas por una tabla nueva, sin modificar las historias anteriores. Cada parte aparece por separado en **Crear Short**. **Elegir una historia aún no añade voz ni subtítulos al render**: esa integración está pendiente.
+Las dos partes se guardan en una transacción, vinculadas por una tabla nueva, sin modificar las historias anteriores. Cada parte aparece por separado en **Crear Short**. Elegir una historia crea un video con voz y subtítulos. El botón **CREAR LOS DOS VIDEOS** genera ambos episodios y muestra dos enlaces de descarga.
 
 Se comprueban extensión aproximada, frases completas y ausencia de frases largas idénticas; si falla el formato, se permite una reescritura. Estas comprobaciones no garantizan por sí solas calidad narrativa ni coherencia: revisá ambos textos antes de usarlos. La duración es una estimación basada en palabras.
 
@@ -148,3 +148,17 @@ En **Fondos**, pegá un enlace de un video público individual de YouTube, confi
 Se aceptan videos de hasta dos horas; el archivo importado tiene un límite de 1 GB. No se admiten listas completas ni transmisiones en vivo. La descarga tiene un tiempo máximo de 20 minutos y solo se admite una importación a la vez. Los archivos temporales se eliminan al terminar o fallar. Los datos anteriores se conservan.
 
 El contenedor instala Node 22 y `requirements.txt` incluye `yt-dlp[default]`. Fuera de Codespaces, necesitás Node 22 o superior y FFmpeg en PATH. No se usan cookies ni credenciales: si YouTube exige iniciar sesión, bloquea la conexión o restringe un video, se muestra el motivo y sigue disponible la subida manual. Actualizar yt-dlp puede ser necesario si YouTube cambia.
+
+
+## Narración, subtítulos y dos videos
+
+1. Importá o subí un fondo.
+2. Generá una historia, revisá y editá ambas partes; **GUARDAR CAMBIOS** conserva las correcciones.
+3. Pulsá **CREAR LOS DOS VIDEOS**. Cada parte se guarda como un MP4 vertical de 1080×1920 con audio AAC y subtítulos incrustados.
+4. Podés salir de la pantalla y volver a **Crear Short** para recuperar el progreso y los enlaces. Los videos terminados quedan en Historial.
+
+La voz [Piper](https://github.com/OHF-Voice/piper1-gpl) `es_MX-ald-medium` se descarga una sola vez en `storage/voices`. No envía el texto a un servicio remoto. El modelo usa un conjunto de datos bajo [Unlicense](https://huggingface.co/rhasspy/piper-voices/blob/main/es/es_MX/ald/medium/MODEL_CARD); Piper usa GPL-3.0. La voz y sus licencias quedan junto al modelo. Necesita conexión para la primera descarga.
+
+La duración final sigue el audio, no recorta la narración al tiempo estimado. Los subtítulos se alinean por frase; los grupos de hasta tres palabras usan tiempos estimados dentro de la frase. **Regenerar fondo** conserva el audio y los subtítulos originales aunque hayas editado después la historia. Para aplicar cambios de texto, generá un video nuevo.
+
+Hay una generación narrada activa a la vez. Si se reinicia el servidor, el trabajo interrumpido se marca como fallido y puede reintentarse. Si solo llegó a terminar la primera parte, su descarga sigue disponible. Los renders usan carpetas temporales separadas y los fondos se repiten cuando no alcanzan para cubrir toda la voz.

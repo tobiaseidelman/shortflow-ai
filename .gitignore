@@ -17,3 +17,6 @@ storage/temp/*
 !storage/**/.gitkeep
 .DS_Store
 *.log
+
+# ONNX runtime local telemetry/session artifact
+:memory:.ses

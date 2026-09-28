@@ -23,6 +23,7 @@ SCHEMA = {
 }
 SYSTEM = """Escribís relatos originales de ficción en español natural, estilo confesión de Reddit.
 El narrador cuenta su propia experiencia EN PRIMERA PERSONA: yo, me, mi.
+Conservá su identidad y género gramatical, también en los diálogos.
 Usá hechos cotidianos, diálogos claros y consecuencias creíbles. Nada de accidentes
 convenientes, fortunas repentinas, documentos mágicos ni personajes nuevos que solucionan todo.
 Respetá el plan y los hechos anteriores. Cada escena debe aportar algo nuevo."""
@@ -199,7 +200,10 @@ def generate_story(theme, duration, storage, progress):
             'resource, clue, cliffhanger, outcome. El narrador sufre el agravio; su recurso o aporte '
             'subestimado causa el giro. La pista debe aparecer antes de usar ese recurso. '
             'cliffhanger describe el enfrentamiento pendiente al terminar parte 1; outcome lo resuelve '
-            'con una decisión y un costo para el narrador. Máximo 180 palabras en total.'}], json_mode=True)
+            'con un HECHO FINAL YA OCURRIDO y un costo para el narrador. No alcanza con prometer hablar, '
+            'revelar información o esperar colaboración. Elegí un aporte concreto (horas de trabajo, '
+            'reserva, herramientas, acceso, pago), no el vago conocimiento de preferencias. '
+            'El giro cambia una decisión real. El título debe referirse a ese conflicto. Máximo 180 palabras en total.'}], json_mode=True)
         data = json.loads(outline)
         fields = ('title', 'narrator', 'relationship', 'grievance', 'resource', 'clue', 'cliffhanger', 'outcome')
         if not isinstance(data, dict) or any(not isinstance(data.get(k), str) or not data[k].strip() for k in fields):
@@ -211,14 +215,17 @@ def generate_story(theme, duration, storage, progress):
         common = 'Este es el plan de los DOS episodios, no lo narres como un resumen: ' + outline
         first_prompt = (common + '\nEscribí SOLO la PARTE 1 EN PRIMERA PERSONA. ' + length +
                         'Abrí con el agravio concreto, mostrá el aporte ignorado y la pista mediante acciones '
-                        'y diálogo. El protagonista toma una decisión. Terminá justo en el enfrentamiento '
+                        'y diálogo. El protagonista toma una decisión. No describas la estructura del relato ni escribas '
+                        '«la confrontación está pendiente», «la tensión era palpable» o «todo cambiaría». Terminá en una acción concreta del enfrentamiento '
                         'pendiente del plan, sin resolverlo todavía. Solo prosa, sin título ni JSON.')
         progress('Escribiendo la parte 1: conflicto y suspenso…')
         part1 = write_episode([system, {'role': 'user', 'content': first_prompt}], duration, progress)
         second_prompt = ('Continuá con SOLO la PARTE 2 EN PRIMERA PERSONA. ' + length +
                          'Retomá exactamente la última escena, sin resumir el episodio anterior. '
                          'Mostrá el enfrentamiento prometido, la negociación y la decisión final del plan. '
-                         'Cerrá con una consecuencia concreta. Mismos nombres, parentescos, objetos y hechos. '
+                         'Cerrá mostrando una consecuencia YA OCURRIDA, no esperando que en el futuro colaboren. '
+                         'No contradigas lo que cada personaje sabía en la primera parte. '
+                         'Mismos nombres, género gramatical, parentescos, objetos y hechos. '
                          'Sin otra parte pendiente. Solo prosa, sin título ni JSON.')
         progress('Escribiendo la parte 2 desde el final de la primera…')
         part2 = write_episode([system, {'role': 'user', 'content': first_prompt},

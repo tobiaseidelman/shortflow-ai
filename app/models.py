@@ -36,3 +36,21 @@ class VideoImportJob(Base):
     status: Mapped[str] = mapped_column(String(20))
     message: Mapped[str] = mapped_column(Text, default='')
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class RenderJob(Base):
+    __tablename__ = 'render_jobs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    status: Mapped[str] = mapped_column(String(20))
+    message: Mapped[str] = mapped_column(Text, default='')
+    story_ids: Mapped[str] = mapped_column(Text)
+    short_ids: Mapped[str] = mapped_column(Text, default='[]')
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class NarrationAsset(Base):
+    __tablename__ = 'narration_assets'
+    short_id: Mapped[int] = mapped_column(ForeignKey('shorts.id'), primary_key=True)
+    audio_path: Mapped[str] = mapped_column(Text)
+    subtitle_path: Mapped[str] = mapped_column(Text)
+    text_snapshot: Mapped[str] = mapped_column(Text)
