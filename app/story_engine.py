@@ -1,6 +1,7 @@
 """Generate connected fictional Reddit-style episodes with local Ollama only."""
 import atexit
 import json
+import logging
 import os
 from pathlib import Path
 import re
@@ -176,7 +177,16 @@ def complete(messages, json_mode=False):
             raise ValueError('La IA cortó la respuesta antes de terminar.')
         return raw.get('message', {}).get('content', '').strip()
     except HTTPError as exc:
-        raise StoryGenerationError('La IA local rechazó la solicitud. Revisá memoria y el registro de Ollama.') from exc
+        try:
+            detail = json.loads(exc.read(8192)).get('error', '')
+        except (ValueError, OSError):
+            detail = ''
+        logging.getLogger(__name__).error('Ollama HTTP %s: %s', exc.code, str(detail)[:1000])
+        if any(term in str(detail).lower() for term in ('memory', 'out of memory', 'allocate', 'oom')):
+            message = 'La IA no tiene suficiente memoria disponible. Detené otras tareas o usá un Codespace con más memoria; tus historias guardadas se conservan.'
+        else:
+            message = 'La IA local falló al ejecutar el modelo. El motivo quedó en la terminal y en storage/ollama/server.log.'
+        raise StoryGenerationError(message) from exc
     except (URLError, OSError) as exc:
         raise StoryGenerationError('La IA local no terminó a tiempo o perdió la conexión. Volvé a intentarlo.') from exc
 

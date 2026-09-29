@@ -1,7 +1,7 @@
 let selectedStory=0,selectedShort=0;const $=s=>document.querySelector(s);const pages=['dashboard','fondos','historias','crear','editor','historial','config'];
 function show(id){pages.forEach(x=>$('#'+x).classList.toggle('active',x===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));$('#title').textContent=document.querySelector(`button[data-page="${id}"]`).textContent; if(id==='fondos'){loadVideos();resumeImport();}if(id==='historias'||id==='crear')loadStories();if(id==='crear')resumeRender();if(id==='historial')loadShorts()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.page));
-async function upload(){let f=$('#file').files[0];if(!f)return msg('#uploadMsg','Elegí un archivo.','err');let fd=new FormData();fd.append('file',f);msg('#uploadMsg','Subiendo y analizando frames… puede tardar según el video.','loading');try{let r=await fetch('/api/videos/upload',{method:'POST',body:fd}),j=await r.json();if(!r.ok)throw Error(j.detail);msg('#uploadMsg',`Listo: ${j.clips} clips detectados y puntuados.`,'ok');loadVideos()}catch(e){msg('#uploadMsg',e.message,'err')}}
+async function upload(){let f=$('#file').files[0];if(!f)return msg('#uploadMsg','Elegí un archivo.','err');let fd=new FormData();fd.append('file',f);msg('#uploadMsg','Subiendo y analizando frames… puede tardar según el video.','loading');try{let j=await storyRequest('/api/videos/upload',{method:'POST',body:fd});msg('#uploadMsg',`Listo: ${j.clips} clips detectados y puntuados.`,'ok');loadVideos()}catch(e){msg('#uploadMsg',e.message,'err')}}
 let activeImport=null;
 function importMessage(text,kind='loading') {
   const p=document.createElement('p');p.className=kind;p.textContent=text;$('#urlMsg').replaceChildren(p);
@@ -40,12 +40,14 @@ async function resumeImport() {
   } catch(error){importMessage('No se pudo consultar la última importación.','err');}
 }
 async function loadVideos() {
+  try {
   const videos=await storyRequest('/api/videos');const container=$('#videos');container.replaceChildren();
   if(!videos.length){const p=document.createElement('p');p.textContent='No hay fondos todavía.';container.append(p);return;}
   const table=document.createElement('table');table.className='table';
   const header=table.insertRow();['Nombre','Duración','Resolución','Estado','Clips'].forEach(label=>{const cell=document.createElement('th');cell.textContent=label;header.append(cell);});
   videos.forEach(video=>{const row=table.insertRow();[video.name,video.duration.toFixed(1)+'s',video.width+'×'+video.height,video.status,video.clips].forEach(value=>row.insertCell().textContent=String(value));});
   container.append(table);
+  } catch(error){$('#videos').textContent=error.message;}
 }
 let activeGeneration = null, currentPair=null;
 function storyMessage(text, kind='loading') {
@@ -54,7 +56,12 @@ function storyMessage(text, kind='loading') {
 }
 async function storyRequest(url, options) {
   const response=await fetch(url, options);
-  const data=await response.json();
+  let data;
+  try {data=await response.json();}
+  catch(error) {
+    throw new Error(response.status===413?'El archivo supera el tamaño permitido.':
+      'El servidor no devolvió una respuesta válida. Puede haberse interrumpido o agotado el tiempo de la solicitud. Revisá Codespaces y volvé a intentar.');
+  }
   if(!response.ok) throw new Error(typeof data.detail==='string'?data.detail:'Revisá el tema y la duración e intentá de nuevo.');
   return data;
 }
@@ -122,7 +129,7 @@ async function loadStories(resume=true) {
       else if(jobs[0]?.status==='failed')storyMessage(jobs[0].message,'err');
       else if(jobs[0]?.status==='ready'&&$('#storyResult').hidden)showStoryPair(jobs[0]);
     }
-  } catch(error) {storyMessage('No se pudieron cargar las historias. Volvé a intentarlo.','err');}
+  } catch(error) {storyMessage(error.message,'err');}
 }
 let activeRender=null;
 function renderMessage(text,kind='loading') {

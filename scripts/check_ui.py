@@ -50,6 +50,13 @@ with tempfile.TemporaryDirectory() as temp:
   page.locator('#storySelect').select_option('11')
   page.get_by_role('button',name='GENERAR SHORT',exact=True).click()
   expect(page.locator('#makeDownloads a')).to_have_count(1)
+  page.route('**/api/videos/upload',lambda route:route.fulfill(status=502,content_type='text/html',body='<html>Bad gateway</html>'))
+  page.route('**/api/videos',lambda route:route.fulfill(status=503,content_type='application/json',body=json.dumps({'detail':'La base de datos está ocupada.'})))
+  page.get_by_role('button',name='Fondos',exact=True).click()
+  expect(page.locator('#videos')).to_contain_text('base de datos está ocupada')
+  page.locator('#file').set_input_files({'name':'sample.mp4','mimeType':'video/mp4','buffer':b'test'})
+  page.get_by_role('button',name='SUBIR Y ANALIZAR',exact=True).click()
+  expect(page.locator('#uploadMsg')).to_contain_text('El servidor no devolvió una respuesta válida')
   assert not state['errors'],state['errors']
   page.screenshot(path=str(Path(temp)/'ui.png'),full_page=True)
   browser.close()

@@ -210,3 +210,12 @@ def test_overlong_episode_is_shortened_not_expanded(monkeypatch):
     assert story_engine.write_episode([],45,lambda m:None)==good
     assert 'Recortá' in messages_seen[1][-1]['content']
     assert 'no agregues escenas' in messages_seen[1][-1]['content']
+
+
+def test_model_memory_failure_explains_cause(monkeypatch):
+    from urllib.error import HTTPError
+    def fail(*args, **kwargs):
+        raise HTTPError('http://127.0.0.1:11434/api/chat',500,'Internal error',{},BytesIO(b'{"error":"model requires more system memory"}'))
+    monkeypatch.setattr(story_engine, '_request', fail)
+    with pytest.raises(story_engine.StoryGenerationError, match='suficiente memoria'):
+        story_engine.complete([])
