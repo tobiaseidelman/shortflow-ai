@@ -1,7 +1,97 @@
 let selectedStory=0,selectedShort=0;const $=s=>document.querySelector(s);const pages=['dashboard','fondos','historias','crear','editor','historial','config'];
-function show(id){pages.forEach(x=>$('#'+x).classList.toggle('active',x===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));$('#title').textContent=document.querySelector(`button[data-page="${id}"]`).textContent; if(id==='fondos'){loadVideos();resumeImport();}if(id==='historias'||id==='crear')loadStories();if(id==='crear')resumeRender();if(id==='historial')loadShorts()}
+function show(id){pages.forEach(x=>$('#'+x).classList.toggle('active',x===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));$('#title').textContent=document.querySelector(`button[data-page="${id}"]`).textContent; if(id==='fondos'){loadVideos();resumeImport();resumeUpload();}if(id==='historias'||id==='crear')loadStories();if(id==='crear')resumeRender();if(id==='historial')loadShorts()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.page));
-async function upload(){let f=$('#file').files[0];if(!f)return msg('#uploadMsg','Elegí un archivo.','err');let fd=new FormData();fd.append('file',f);msg('#uploadMsg','Subiendo y analizando frames… puede tardar según el video.','loading');try{let j=await storyRequest('/api/videos/upload',{method:'POST',body:fd});msg('#uploadMsg',`Listo: ${j.clips} clips detectados y puntuados.`,'ok');loadVideos()}catch(e){msg('#uploadMsg',e.message,'err')}}
+let activeUpload=false, uploadWatch=null, pendingUpload=null;
+function uploadMessage(text,kind='loading') {
+  const p=document.createElement('p');p.className=kind;p.textContent=text;
+  $('#uploadMsg').replaceChildren(p);
+}
+function uploadControls(busy) {
+  $('#uploadVideo').disabled=busy;$('#file').disabled=busy;
+  $('#cancelUpload').disabled=busy;
+}
+function rememberUpload(value) {
+  try {if(value)localStorage.setItem('shortflow-upload',JSON.stringify(value));else localStorage.removeItem('shortflow-upload');}catch(error){}
+}
+function previousUpload() {
+  try {return JSON.parse(localStorage.getItem('shortflow-upload'));}catch(error){return null;}
+}
+async function sendUploadChunk(id,offset,chunk) {
+  for(let attempt=0;attempt<3;attempt++) {
+    const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),120000);
+    try {return await storyRequest('/api/uploads/'+id+'/chunks?offset='+offset,
+      {method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:chunk,signal:controller.signal});}
+    catch(error) {
+      if(attempt===2 || (error.status>=400 && error.status<500 && error.status!==408))throw error;
+      uploadMessage('La conexión se interrumpió. Reintentando el fragmento…');
+      await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)));
+    } finally {clearTimeout(timer);}
+  }
+}
+async function upload() {
+  if(activeUpload || uploadWatch)return;
+  const file=$('#file').files[0];
+  if(!file)return uploadMessage('Elegí un archivo.','err');
+  if(file.size>1024**3)return uploadMessage('El límite por archivo es 1 GB. Elegí un archivo más pequeño.','err');
+  if(!file.size)return uploadMessage('El archivo está vacío.','err');
+  activeUpload=true;uploadControls(true);
+  const fingerprint=[file.name,file.size,file.lastModified].join(':');
+  try {
+    uploadMessage('Preparando la subida por partes…');
+    let job, saved=previousUpload();
+    if(saved?.fingerprint===fingerprint) {
+      try {job=await storyRequest('/api/uploads/'+saved.id);}catch(error){if(error.status!==404)throw error;}
+      if(job && job.status!=='uploading')job=null;
+    }
+    if(!job)job=await storyRequest('/api/uploads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:file.name,size:file.size})});
+    pendingUpload=job.id;$('#cancelUpload').hidden=false;
+    rememberUpload({id:job.id,fingerprint});
+    while(job.received<file.size) {
+      const offset=job.received;
+      job=await sendUploadChunk(job.id,offset,file.slice(offset,Math.min(offset+job.chunk_size,file.size)));
+      uploadMessage('Subiendo: '+Math.floor(job.received/file.size*100)+'% · '+Math.round(job.received/1024**2)+' de '+Math.ceil(file.size/1024**2)+' MB');
+    }
+    job=await storyRequest('/api/uploads/'+job.id+'/complete',{method:'POST'});
+    $('#cancelUpload').hidden=true;rememberUpload(null);
+    await watchUpload(job.id);
+  } catch(error) {uploadMessage(error.message+' Si la subida quedó a medias, volvé a pulsar SUBIR Y ANALIZAR con el mismo archivo.','err');}
+  finally {activeUpload=false;uploadControls(false);}
+}
+async function watchUpload(id) {
+  if(uploadWatch)return;
+  uploadWatch=id;uploadControls(true);
+  try {
+    while(true) {
+      const job=await storyRequest('/api/uploads/'+id);
+      uploadMessage(job.message,job.status==='ready'?'ok':job.status==='failed'?'err':'loading');
+      if(job.status!=='analyzing') {if(job.status==='ready')await loadVideos();break;}
+      await new Promise(resolve=>setTimeout(resolve,2000));
+    }
+  } catch(error) {uploadMessage('No se pudo consultar el análisis. Volvé a Fondos para recuperar el progreso.','err');}
+  finally {uploadWatch=null;if(!activeUpload)uploadControls(false);}
+}
+async function resumeUpload() {
+  if(activeUpload || uploadWatch)return;
+  try {
+    const jobs=await storyRequest('/api/uploads');
+    if(activeUpload || uploadWatch)return;
+    const analyzing=jobs.find(job=>job.status==='analyzing');
+    if(analyzing){$('#cancelUpload').hidden=true;watchUpload(analyzing.id);return;}
+    const pending=jobs.find(job=>job.status==='uploading');
+    if(pending) {
+      pendingUpload=pending.id;$('#cancelUpload').hidden=false;
+      uploadMessage('Hay una subida pendiente: '+pending.name+'. Seleccioná el mismo archivo para reanudar desde este navegador, o cancelá la subida para empezar otra.');
+    } else if(jobs[0])uploadMessage(jobs[0].message,jobs[0].status==='ready'?'ok':'err');
+  } catch(error){uploadMessage(error.message,'err');}
+}
+async function cancelUpload() {
+  if(activeUpload || uploadWatch || !pendingUpload)return;
+  try {
+    await storyRequest('/api/uploads/'+pendingUpload,{method:'DELETE'});
+    pendingUpload=null;rememberUpload(null);$('#cancelUpload').hidden=true;
+    uploadMessage('Subida cancelada. Podés elegir otro archivo.','ok');
+  } catch(error){uploadMessage(error.message,'err');}
+}
 let activeImport=null;
 function importMessage(text,kind='loading') {
   const p=document.createElement('p');p.className=kind;p.textContent=text;$('#urlMsg').replaceChildren(p);
@@ -58,11 +148,12 @@ async function storyRequest(url, options) {
   const response=await fetch(url, options);
   let data;
   try {data=await response.json();}
-  catch(error) {
-    throw new Error(response.status===413?'El archivo supera el tamaño permitido.':
+  catch(parseError) {
+    const error=new Error(response.status===413?'El servidor rechazó el tamaño de esta solicitud.':
       'El servidor no devolvió una respuesta válida. Puede haberse interrumpido o agotado el tiempo de la solicitud. Revisá Codespaces y volvé a intentar.');
+    error.status=response.status;throw error;
   }
-  if(!response.ok) throw new Error(typeof data.detail==='string'?data.detail:'Revisá el tema y la duración e intentá de nuevo.');
+  if(!response.ok) {const error=new Error(typeof data.detail==='string'?data.detail:'No se pudo completar la solicitud. Revisá los datos e intentá de nuevo.');error.status=response.status;throw error;}
   return data;
 }
 function showStoryPair(job) {

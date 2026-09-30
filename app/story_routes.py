@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app):
+    from .upload_routes import recover_uploads
+    recover_uploads()
     from .import_routes import recover_imports
     recover_imports()
     from .render_routes import recover_renders

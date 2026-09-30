@@ -12,6 +12,7 @@ from .video_engine import metadata, analyze, optimize, render
 from .story_routes import router as story_router, lifespan, set_storage
 from .render_routes import router as render_router, set_storage as set_render_storage
 from .import_routes import router as import_router, set_storage as set_import_storage
+from .upload_routes import router as upload_router, set_storage as set_upload_storage
 ROOT = Path(__file__).resolve().parents[1]
 STORE = Path(os.getenv('SHORTFLOW_STORAGE_DIR', str(ROOT / 'storage'))).expanduser().resolve()
 UP = STORE / 'uploads'
@@ -21,10 +22,12 @@ for p in (UP, OUT, STORE / 'temp'):
 Base.metadata.create_all(engine)
 set_storage(STORE)
 set_import_storage(STORE)
+set_upload_storage(STORE)
 set_render_storage(STORE)
 app = FastAPI(title='ShortFlow AI', lifespan=lifespan)
 app.include_router(story_router)
 app.include_router(import_router)
+app.include_router(upload_router)
 app.include_router(render_router)
 app.mount('/static', StaticFiles(directory=ROOT / 'app/static'), name='static')
 templates = Jinja2Templates(directory=ROOT / 'app/templates')

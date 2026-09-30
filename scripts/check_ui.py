@@ -1,6 +1,6 @@
 import os,tempfile,json
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 from playwright.sync_api import sync_playwright, expect
 
 with tempfile.TemporaryDirectory() as temp:
@@ -10,7 +10,7 @@ with tempfile.TemporaryDirectory() as temp:
  from app.main import app
  with TestClient(app) as client: html=client.get('/').text
  pair={'id':'pair','title':'Prueba de dos partes','duration':90,'status':'ready','message':'Lista','parts':[{'number':1,'id':11,'title':'Parte 1','text':'Yo conté lo que pasó.','words':5,'duration':90},{'number':2,'id':12,'title':'Parte 2','text':'Yo decidí cómo resolverlo.','words':4,'duration':90}]}
- state={'render_parts':2,'saved':0,'imports':0,'errors':[]}
+ state={'render_parts':2,'saved':0,'imports':0,'errors':[],'chunk_sizes':[],'upload':None}
  def handle(route):
   request=route.request;path=urlsplit(request.url).path
   payload=None
@@ -21,6 +21,18 @@ with tempfile.TemporaryDirectory() as temp:
   elif path=='/api/story-generations':payload=[pair]
   elif path.startswith('/api/stories/') and request.method=='PUT':state['saved']+=1;payload={'status':'saved'}
   elif path=='/api/videos':payload=[{'id':1,'name':'<script>alert(1)</script>','duration':600,'width':1280,'height':720,'status':'ready','clips':208}]
+  elif path=='/api/uploads' and request.method=='POST':
+   size=request.post_data_json['size'];state['upload']={'id':'upload1','name':'sample.mp4','size':size,'received':0,'status':'uploading','chunk_size':4*1024**2};payload=state['upload']
+  elif path=='/api/uploads':payload=[]
+  elif path=='/api/uploads/upload1/chunks':
+   chunk=request.post_data_buffer
+   if len(chunk)>5*1024**2:return route.fulfill(status=413,content_type='text/html',body='<html>Too large</html>')
+   assert int(parse_qs(urlsplit(request.url).query)['offset'][0])==state['upload']['received']
+   state['chunk_sizes'].append(len(chunk));state['upload']['received']+=len(chunk);payload=state['upload']
+  elif path=='/api/uploads/upload1/complete':
+   assert state['upload']['received']==state['upload']['size']
+   state['upload'].update(status='ready',message='Fondo listo: 10 clips disponibles.');payload=state['upload']
+  elif path=='/api/uploads/upload1':payload=state['upload']
   elif path=='/api/imports':payload=[]
   elif path=='/api/import-url':payload={'id':'import1','status':'running'}
   elif path=='/api/imports/import1':state['imports']+=1;payload={'id':'import1','status':'ready','message':'Fondo importado: 208 clips disponibles.'}
@@ -50,7 +62,12 @@ with tempfile.TemporaryDirectory() as temp:
   page.locator('#storySelect').select_option('11')
   page.get_by_role('button',name='GENERAR SHORT',exact=True).click()
   expect(page.locator('#makeDownloads a')).to_have_count(1)
-  page.route('**/api/videos/upload',lambda route:route.fulfill(status=502,content_type='text/html',body='<html>Bad gateway</html>'))
+  page.get_by_role('button',name='Fondos',exact=True).click()
+  page.locator('#file').set_input_files({'name':'sample.mp4','mimeType':'video/mp4','buffer':b'x'*(9*1024**2)})
+  page.get_by_role('button',name='SUBIR Y ANALIZAR',exact=True).click()
+  expect(page.locator('#uploadMsg')).to_contain_text('Fondo listo: 10 clips',timeout=30000)
+  assert state['chunk_sizes']==[4*1024**2,4*1024**2,1024**2]
+  page.route('**/api/uploads',lambda route:route.fulfill(status=502,content_type='text/html',body='<html>Bad gateway</html>') if route.request.method=='POST' else route.fulfill(status=200,content_type='application/json',body='[]'))
   page.route('**/api/videos',lambda route:route.fulfill(status=503,content_type='application/json',body=json.dumps({'detail':'La base de datos está ocupada.'})))
   page.get_by_role('button',name='Fondos',exact=True).click()
   expect(page.locator('#videos')).to_contain_text('base de datos está ocupada')

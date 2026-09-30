@@ -162,3 +162,8 @@ La voz [Piper](https://github.com/OHF-Voice/piper1-gpl) `es_MX-ald-medium` se de
 La duración final sigue el audio, no recorta la narración al tiempo estimado. Los subtítulos se alinean por frase; los grupos de hasta tres palabras usan tiempos estimados dentro de la frase. **Regenerar fondo** conserva el audio y los subtítulos originales aunque hayas editado después la historia. Para aplicar cambios de texto, generá un video nuevo.
 
 Hay una tarea pesada de historias o videos activa a la vez para evitar agotar la memoria. Si se reinicia el servidor, el trabajo interrumpido se marca como fallido y puede reintentarse. Si solo llegó a terminar la primera parte, su descarga sigue disponible. Los renders usan carpetas temporales separadas y los fondos se repiten cuando no alcanzan para cubrir toda la voz.
+
+
+### Archivos grandes desde el navegador
+
+La subida de fondos envía bloques de 4 MB y muestra el porcentaje recibido, hasta 1 GB por archivo. El análisis empieza en segundo plano después de recibir el archivo completo; al volver a Fondos se recupera su estado. Si se corta la conexión durante el envío, seleccioná el mismo archivo en el mismo navegador y volvé a pulsar SUBIR Y ANALIZAR para reanudar. Podés cancelar una subida pendiente para elegir otro archivo. Las subidas sin terminar vencen a las 24 horas y se limpian al reiniciar o al iniciar otra subida. No se publica ningún video en GitHub.

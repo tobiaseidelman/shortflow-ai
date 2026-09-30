@@ -54,3 +54,15 @@ class NarrationAsset(Base):
     audio_path: Mapped[str] = mapped_column(Text)
     subtitle_path: Mapped[str] = mapped_column(Text)
     text_snapshot: Mapped[str] = mapped_column(Text)
+
+
+class UploadJob(Base):
+    __tablename__ = 'upload_jobs'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(255))
+    size: Mapped[int] = mapped_column(Integer)
+    received: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default='uploading')
+    message: Mapped[str] = mapped_column(Text, default='Subiendo archivo…')
+    video_id: Mapped[int | None] = mapped_column(ForeignKey('background_videos.id'), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
