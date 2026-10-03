@@ -268,3 +268,25 @@ def test_invalid_review_is_not_treated_as_approval(monkeypatch, review):
     monkeypatch.setattr(story_engine, 'complete', lambda *args, **kwargs: review)
     with pytest.raises(ValueError, match='revisión'):
         story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)
+
+
+def test_review_schema_and_load_wait_are_sent_to_ollama(monkeypatch):
+    def request(path, payload=None, timeout=10):
+        assert path == '/api/chat'
+        assert timeout == 1200
+        assert payload['format'] == story_engine.REVIEW_SCHEMA
+        assert payload['options']['temperature'] == 0
+        assert payload['options']['use_mmap'] is True
+        return BytesIO(json.dumps({'done': True, 'message': {'content': json.dumps({'issues': []})}}).encode())
+    monkeypatch.setattr(story_engine, '_request', request)
+    assert json.loads(story_engine.complete([], story_engine.REVIEW_SCHEMA)) == {'issues': []}
+
+
+def test_load_timeout_is_explained_separately(monkeypatch):
+    from urllib.error import HTTPError
+    def request(*args, **kwargs):
+        raise HTTPError('http://127.0.0.1:11434/api/chat',500,'Internal error',{},
+                        BytesIO(b'{"error":"timed out waiting for llama-server to start - "}'))
+    monkeypatch.setattr(story_engine, '_request', request)
+    with pytest.raises(story_engine.StoryGenerationError, match='tiempo de carga'):
+        story_engine.complete([])

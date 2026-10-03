@@ -14,6 +14,13 @@ from urllib.request import ProxyHandler, Request, build_opener
 
 MODEL = 'qwen2.5:7b'
 URL = 'http://127.0.0.1:11434'
+LOAD_TIMEOUT = '10m'
+CHAT_TIMEOUT = 1200  # Allow model loading plus generation on a CPU Codespace.
+REVIEW_SCHEMA = {
+    'type': 'object', 'required': ['issues'], 'additionalProperties': False,
+    'properties': {'issues': {'type': 'array', 'maxItems': 4,
+                              'items': {'type': 'string', 'minLength': 1}}},
+}
 _server = None
 _http = build_opener(ProxyHandler({}))
 SCHEMA = {
@@ -79,7 +86,8 @@ def ensure_model(storage, progress):
         data.mkdir(parents=True, exist_ok=True)
         env = dict(os.environ, OLLAMA_HOST='127.0.0.1:11434',
                    OLLAMA_MODELS=str(data / 'models'), OLLAMA_NO_CLOUD='1',
-                   OLLAMA_NUM_PARALLEL='1', OLLAMA_MAX_LOADED_MODELS='1')
+                   OLLAMA_NUM_PARALLEL='1', OLLAMA_MAX_LOADED_MODELS='1',
+                   OLLAMA_LOAD_TIMEOUT=LOAD_TIMEOUT)
         with (data / 'server.log').open('ab') as log:
             _server = subprocess.Popen([executable, 'serve'], env=env,
                                        stdout=log, stderr=log)
@@ -155,9 +163,10 @@ def complete(messages, json_mode=False):
                     'seed': secrets.randbelow(2**31)},
     }
     if json_mode:
-        payload['format'] = 'json'
+        payload['format'] = json_mode if isinstance(json_mode, dict) else 'json'
+        payload['options']['temperature'] = 0
     try:
-        with _request('/api/chat', payload, timeout=600) as response:
+        with _request('/api/chat', payload, timeout=CHAT_TIMEOUT) as response:
             raw = json.load(response)
         if raw.get('error'):
             raise StoryGenerationError('La IA no pudo generar la historia. Revisá la memoria disponible.')
@@ -170,7 +179,9 @@ def complete(messages, json_mode=False):
         except (ValueError, OSError):
             detail = ''
         logging.getLogger(__name__).error('Ollama HTTP %s: %s', exc.code, str(detail)[:1000])
-        if any(term in str(detail).lower() for term in ('memory', 'out of memory', 'allocate', 'oom')):
+        if 'timed out waiting' in str(detail).lower():
+            message = 'La IA agotó el tiempo de carga del modelo. El servicio debe reiniciarse para aplicar la configuración actualizada; tus historias guardadas se conservan.'
+        elif any(term in str(detail).lower() for term in ('memory', 'out of memory', 'allocate', 'oom')):
             message = 'La IA no tiene suficiente memoria disponible. Detené otras tareas o usá un Codespace con más memoria; tus historias guardadas se conservan.'
         else:
             message = 'La IA local falló al ejecutar el modelo. El motivo quedó en la terminal y en storage/ollama/server.log.'
@@ -240,7 +251,7 @@ def review_and_repair(theme, draft, duration, progress):
              'y explican qué debe corregirse. No reescribas todavía.'},
             {'role': 'user', 'content': json.dumps(
                 {'tema_original': theme, 'parte1': draft['part1'], 'parte2': draft['part2']},
-                ensure_ascii=False)}], json_mode=True))
+                ensure_ascii=False)}], json_mode=REVIEW_SCHEMA))
         issues = review.get('issues') if isinstance(review, dict) else None
         if not isinstance(issues, list) or any(not isinstance(x, str) or not x.strip() for x in issues):
             raise ValueError('La IA no devolvió una revisión de continuidad válida.')
