@@ -26,8 +26,10 @@ if __name__ == '__main__':
     try:
         with tempfile.TemporaryDirectory(prefix='shortflow-model-') as storage:
             result = generate_story(
-                'Mi hermana se atribuye mi trabajo organizando un evento familiar y me excluye de él. '
-                'El giro debe ser verosímil y permitir entender una pista de la primera parte.',
+                'Mi hermano me pidió que pagara el catering de su boda. Una semana antes descubrí '
+                'que no estaba invitado porque su novia se avergonzaba de mi trabajo pintando casas. '
+                'Ya pagué la seña, falta el saldo y el contrato está a nombre de él. '
+                'Cuando me negué a pagar el resto vino a mi casa con nuestros padres para presionarme.',
                 90, Path(storage), lambda message: print(message, flush=True))
             print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
             stop_server()

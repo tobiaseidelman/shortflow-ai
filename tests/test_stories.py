@@ -119,7 +119,7 @@ def test_plan_then_each_part_shares_story_context(tmp_path, monkeypatch):
     result = sample_story()
     result['part1'] = 'Yo ' + result['part1']
     result['part2'] = 'Me ' + result['part2']
-    replies = iter([json.dumps(outline), result['part1'], result['part2']])
+    replies = iter([json.dumps(outline), result['part1'], result['part2'], '{"issues": []}'])
     calls = []
     def request(path, payload=None, timeout=10):
         calls.append((path, payload))
@@ -131,13 +131,18 @@ def test_plan_then_each_part_shares_story_context(tmp_path, monkeypatch):
     monkeypatch.setattr(story_engine, '_request', request)
     saved = story_engine.generate_story('Tema propio', 45, tmp_path, lambda m: None)
     assert saved['part1'] == result['part1'] and saved['part2'] == result['part2']
-    assert len(calls) == 4
+    assert len(calls) == 5
     assert calls[0][1]['format'] == 'json'
     assert 'format' not in calls[1][1]
     assert 'Tema propio' in calls[0][1]['messages'][1]['content']
     second_messages = calls[2][1]['messages']
     assert second_messages[2] == {'role': 'assistant', 'content': result['part1']}
     assert outline['outcome'] in second_messages[1]['content']
+    assert 'Tema propio' in second_messages[1]['content']
+    assert 'Tema propio' in calls[1][1]['messages'][1]['content']
+    review_input = json.loads(calls[3][1]['messages'][1]['content'])
+    assert review_input == {'tema_original': 'Tema propio', 'parte1': result['part1'], 'parte2': result['part2']}
+    assert calls[0][1]['options']['use_mmap'] is True
 
 
 def test_episode_revision_receives_actual_draft(monkeypatch):
@@ -219,3 +224,47 @@ def test_model_memory_failure_explains_cause(monkeypatch):
     monkeypatch.setattr(story_engine, '_request', fail)
     with pytest.raises(story_engine.StoryGenerationError, match='suficiente memoria'):
         story_engine.complete([])
+
+
+def test_continuity_repair_passes_corrected_first_part_to_second(monkeypatch):
+    draft = sample_story()
+    repaired = {'part1': 'Yo ' + draft['part1'], 'part2': 'Me ' + draft['part2']}
+    verdicts = iter(['{"issues": ["Cambió hermano por hermana"]}', '{"issues": []}'])
+    reviews, revisions = [], []
+    def review(messages, json_mode=False):
+        assert json_mode
+        reviews.append(json.loads(messages[1]['content']))
+        return next(verdicts)
+    def write(messages, duration, progress):
+        revisions.append(messages[1]['content'])
+        return repaired['part1' if len(revisions) == 1 else 'part2']
+    monkeypatch.setattr(story_engine, 'complete', review)
+    monkeypatch.setattr(story_engine, 'write_episode', write)
+    result = story_engine.review_and_repair('Mi hermano me pidió dinero', draft, 45, lambda m: None)
+    assert result['part1'] == repaired['part1']
+    assert result['part2'] == repaired['part2']
+    assert repaired['part1'] in revisions[1]
+    assert 'Mi hermano me pidió dinero' in revisions[0]
+    assert reviews[1]['parte1'] == repaired['part1']
+    assert reviews[1]['parte2'] == repaired['part2']
+
+
+def test_unresolved_contradictions_fail_after_one_repair(monkeypatch):
+    calls = []
+    def review(*args, **kwargs):
+        calls.append(1)
+        return '{"issues": ["El personaje aparece en un lugar sin explicación"]}'
+    monkeypatch.setattr(story_engine, 'complete', review)
+    # Keep the two parts distinct while simulating a reviewer that still rejects them.
+    drafts = iter(['Yo ' + sample_story()['part1'], 'Me ' + sample_story()['part2']])
+    monkeypatch.setattr(story_engine, 'write_episode', lambda *args: next(drafts))
+    with pytest.raises(story_engine.StoryGenerationError, match='contradicciones'):
+        story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('review', ['{}', '{"issues": "ninguna"}', '{"issues": [false]}'])
+def test_invalid_review_is_not_treated_as_approval(monkeypatch, review):
+    monkeypatch.setattr(story_engine, 'complete', lambda *args, **kwargs: review)
+    with pytest.raises(ValueError, match='revisión'):
+        story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)

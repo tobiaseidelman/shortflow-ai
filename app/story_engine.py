@@ -22,35 +22,20 @@ SCHEMA = {
     'required': ['title', 'plan', 'part1', 'part2'],
     'additionalProperties': False,
 }
-SYSTEM = """Escribís relatos originales de ficción en español natural, estilo confesión de Reddit.
-El narrador cuenta su propia experiencia EN PRIMERA PERSONA: yo, me, mi.
-Conservá su identidad y género gramatical, también en los diálogos.
-Usá hechos cotidianos, diálogos claros y consecuencias creíbles. Nada de accidentes
-convenientes, fortunas repentinas, documentos mágicos ni personajes nuevos que solucionan todo.
-Respetá el plan y los hechos anteriores. Cada escena debe aportar algo nuevo.
-
-Referencia de técnica narrativa (NO copies personajes, conflicto, objetos ni frases):
-PARTE 1 DE EJEMPLO:
-«Vos vení temprano y después te vas», me dijo mi primo. Acababa de pedirme mi camioneta
-para llevar las mesas de su fiesta. En el grupo vi que todos estaban invitados menos yo.
-Cuando pregunté, contestó que necesitaba alguien que trabajara, no otro invitado.
-Yo había cambiado mi turno para ayudarlo. Las mesas las alquiló él; la camioneta era mía.
-Le avisé que no haría el traslado y volví a tomar mi turno. No cancelé ninguna reserva
-ajena ni escondí nada. Le quedaban dos días para contratar un flete. El sábado, mientras
-me ponía el uniforme, escuché su voz en el portero: había venido con los amigos a buscar
-las llaves. Bajé sin ellas.
-PARTE 2 DE EJEMPLO:
-Mi primo miró mis manos vacías. Primero dijo que era una broma; después, que el flete
-costaba demasiado. Le mostré el mensaje donde me había pedido irme antes de la fiesta.
-«Entonces vení, pero llevá las mesas», respondió. No quería invitarme: quería el viaje.
-Me dolió admitirlo delante de sus amigos. Uno de ellos se ofreció a buscar otro flete.
-Mi primo terminó pagándolo y yo llegué a trabajar a horario. Esa noche me mandó una foto
-de las mesas instaladas y escribió que le debía una disculpa. No discutí: le respondí
-que podía contar conmigo como primo, pero que cualquier otro traslado tendría que
-pedírmelo sin condiciones escondidas. Guardé el teléfono. Las llaves seguían conmigo.
-
-Aplicá esa precisión causal a una historia DISTINTA según el tema del usuario. No uses
-objetos misteriosos sin función ni conversaciones circulares. Mostrá el resultado final."""
+SYSTEM = """Escribís ficción realista en español natural, en primera persona, para dos videos conectados.
+El tema original del usuario es la fuente principal: conservá parentescos, motivos,
+profesiones, quién paga y a nombre de quién está cada obligación. El plan solo completa
+lo que el usuario no especificó; nunca sustituye sus hechos. No inventes nombres si
+alcanza con decir mi hermano, mi madre o mi pareja.
+Distinguí no querer pagar de no tener dinero, y pagar un servicio de realizar ese trabajo.
+Cada giro nace de una decisión o un hecho ya presentado. No inventes dinero, objetos,
+pruebas ni capacidades para resolver una escena. Respetá quién sabe cada cosa y cuándo.
+Una persona excluida no aparece después dentro del evento sin una explicación.
+Escribí acciones y diálogos concretos, sin repetir gestos ni explicar que hay tensión.
+Parte 1: agravio inmediato, contexto necesario, decisión y enfrentamiento pendiente.
+Parte 2: continúa ese enfrentamiento y muestra su consecuencia, sin otro final pendiente.
+No fuerces perdones ni venganzas espectaculares. Revisá concordancia y tiempos verbales.
+Entregá solamente la prosa del episodio solicitado."""
 
 
 class StoryGenerationError(Exception):
@@ -238,6 +223,50 @@ def write_episode(messages, duration, progress):
 
 
 
+def review_and_repair(theme, draft, duration, progress):
+    """Bounded semantic review; rejected or malformed reviews never become ready stories."""
+    for attempt in range(2):
+        draft = validate_story(draft, duration)
+        progress('Revisando personajes, hechos y continuidad entre las dos partes…')
+        review = json.loads(complete([
+            {'role': 'system', 'content':
+             'Sos editor de continuidad. Compará los DOS textos con el TEMA ORIGINAL. '
+             'Detectá solo errores concretos: parentescos o motivos cambiados, pagar confundido '
+             'con trabajar, dinero u objetos sin origen, hechos que se contradicen, cronología '
+             'imposible, personajes que saben algo sin enterarse, corte desconectado o desenlace '
+             'ausente. El tema tiene prioridad sobre cualquier invención. No pidas cambios '
+             'por gusto ni inventes errores. Respondé JSON {"issues": []} si no hay errores. '
+             'Si los hay, issues contiene hasta cuatro frases que citan el hecho incorrecto '
+             'y explican qué debe corregirse. No reescribas todavía.'},
+            {'role': 'user', 'content': json.dumps(
+                {'tema_original': theme, 'parte1': draft['part1'], 'parte2': draft['part2']},
+                ensure_ascii=False)}], json_mode=True))
+        issues = review.get('issues') if isinstance(review, dict) else None
+        if not isinstance(issues, list) or any(not isinstance(x, str) or not x.strip() for x in issues):
+            raise ValueError('La IA no devolvió una revisión de continuidad válida.')
+        if not issues:
+            return draft
+        if attempt:
+            raise StoryGenerationError('El borrador sigue teniendo contradicciones después de corregirlo. '
+                                       'No se guardó como una historia lista. Volvé a generar o precisá el tema.')
+        progress('Corrigiendo las contradicciones encontradas…')
+        original = {key: draft[key] for key in ('part1', 'part2')}
+        for key in ('part1', 'part2'):
+            context = {'tema_original': theme, 'errores_a_corregir': issues,
+                       'borrador_parte1': original['part1'], 'borrador_parte2': original['part2']}
+            if key == 'part2':
+                del context['borrador_parte1']
+                context['parte1_definitiva'] = draft['part1']
+            prompt = (json.dumps(context, ensure_ascii=False) +
+                      f'\nCorregí SOLO {key}. Entre {round(duration * 1.7)} y '
+                      f'{round(duration * 2.9)} palabras. Conservá los hechos correctos; '
+                      'no agregues otra trama. La parte 1 deja el enfrentamiento pendiente; '
+                      'la parte 2 retoma la parte 1 definitiva y muestra la consecuencia. Solo prosa.')
+            draft[key] = write_episode([{'role': 'system', 'content': SYSTEM},
+                                        {'role': 'user', 'content': prompt}], duration, progress)
+    raise AssertionError('Unreachable review state')
+
+
 def generate_story(theme, duration, storage, progress):
     ensure_model(storage, progress)
     system = {'role': 'system', 'content': SYSTEM}
@@ -247,7 +276,9 @@ def generate_story(theme, duration, storage, progress):
         # small model into copying objects or inventing unrelated twists.
         planner = {'role': 'system', 'content':
             'Sos guionista de relatos cotidianos. Diseñá una sola cadena de causa y efecto, '
-            'con dos protagonistas adultos y un conflicto fácil de entender. '
+            'con un conflicto fácil de entender. Conservá TODOS los hechos explícitos del tema: '
+            'parentescos, motivos, profesiones, pagos y obligaciones. No reemplaces al hermano '
+            'por su novia ni inventes un nombre para el narrador. '
             'No escribas prosa todavía. Respondé solo el JSON solicitado.'}
         outline = complete([planner, {'role': 'user', 'content':
             'Tema del relato: ' + json.dumps(theme, ensure_ascii=False) +
@@ -256,11 +287,11 @@ def generate_story(theme, duration, storage, progress):
             'avisa antes y deja de hacer ese favor. La otra persona intenta convencerlo; '
             'él sostiene el límite y vemos qué tuvo que hacer la otra persona en su lugar. '
             'El giro consiste en descubrir ese aporte subestimado, no en un objeto misterioso. '
-            'No uses listas de invitados, flores ni preferencias de decoración como recurso. '
+            'Agregá solo los detalles indispensables donde el usuario dejó espacio. '
             'Sin sabotajes, castigos desproporcionados ni nuevos conflictos al final. '
             'Usá estos ocho campos JSON de texto, máximo una oración breve por campo: '
-            'title (título), narrator (nombre y género del protagonista), relationship '
-            '(nombre y relación de la otra persona), grievance (agravio concreto), '
+            'title (título), narrator (identidad del protagonista, sin inventar nombre), relationship '
+            '(relación de la otra persona, nombre solo si lo dio el usuario), grievance (agravio concreto), '
             'resource (qué favor o trabajo controla legítimamente el protagonista), '
             'clue (acción temprana que muestra quién hace ese trabajo), cliffhanger '
             '(la otra persona llega a reclamar ese favor al final de la parte 1), '
@@ -275,7 +306,8 @@ def generate_story(theme, duration, storage, progress):
         plan = json.dumps({k: data[k] for k in fields if k != 'title'}, ensure_ascii=False)
         target = round(duration * 2.3)
         length = f'Escribí entre {round(duration * 1.7)} y {round(duration * 2.9)} palabras (objetivo: {target}). '
-        common = 'Este es el plan de los DOS episodios, no lo narres como un resumen: ' + outline
+        common = ('TEMA ORIGINAL (tiene prioridad sobre el plan): ' + json.dumps(theme, ensure_ascii=False) +
+                  '\nPLAN de los DOS episodios, sin narrarlo como resumen: ' + outline)
         first_prompt = (common + '\nEscribí SOLO la PARTE 1 EN PRIMERA PERSONA. ' + length +
                         'Abrí con el agravio concreto, mostrá el aporte ignorado y la pista mediante acciones '
                         'y diálogo. El protagonista toma una decisión. No describas la estructura del relato ni escribas '
@@ -294,7 +326,8 @@ def generate_story(theme, duration, storage, progress):
         part2 = write_episode([system, {'role': 'user', 'content': first_prompt},
                                {'role': 'assistant', 'content': part1},
                                {'role': 'user', 'content': second_prompt}], duration, progress)
-        return validate_story({'title': title, 'plan': plan, 'part1': part1, 'part2': part2}, duration)
+        return review_and_repair(theme, {'title': title, 'plan': plan, 'part1': part1, 'part2': part2},
+                                 duration, progress)
     except (ValueError, TypeError) as exc:
         raise StoryGenerationError('La historia no pasó la revisión: ' + str(exc)) from exc
     finally:
