@@ -163,7 +163,10 @@ def complete(messages, json_mode=False):
     """Keep dialogue roles and unstructured narrative separate from the plot outline."""
     payload = {
         'model': MODEL, 'messages': messages, 'stream': False, 'keep_alive': '5m',
-        'options': {'temperature': 0.65, 'num_ctx': 8192, 'num_predict': 1800,
+        # Explicit mmap avoids Ollama's CPU default of loading without mapping.
+        # This profile successfully loaded Qwen on the user's 8 GiB Codespace.
+        'options': {'temperature': 0.65, 'use_mmap': True, 'num_ctx': 4096,
+                    'num_batch': 128, 'num_predict': 1800,
                     'seed': secrets.randbelow(2**31)},
     }
     if json_mode:
