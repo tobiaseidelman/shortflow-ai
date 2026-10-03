@@ -234,12 +234,54 @@ def write_episode(messages, duration, progress):
 
 
 
+def parse_review(raw):
+    review = json.loads(raw)
+    items = review.get('issues') if isinstance(review, dict) else None
+    if not isinstance(items, list):
+        raise ValueError('Falta la lista de observaciones.')
+    issues = []
+    for item in items:
+        if isinstance(item, str):
+            if item.strip():
+                issues.append(item.strip())
+        elif (isinstance(item, dict) and item and
+              all(isinstance(value, str) for value in item.values()) and
+              any(value.strip() for value in item.values())):
+            # Some models return quoted evidence plus an explanation as an object.
+            # Preserve ALL its fields as a correction request, never as approval.
+            issues.append(json.dumps(item, ensure_ascii=False))
+        else:
+            raise ValueError('Observación con formato inválido.')
+    if items and not issues:
+        raise ValueError('Las observaciones están vacías; falta una decisión válida.')
+    return issues
+
+
+def request_review(messages, progress):
+    for attempt in range(2):
+        raw = complete(messages, json_mode=REVIEW_SCHEMA)
+        try:
+            return parse_review(raw)
+        except ValueError as exc:
+            logging.getLogger(__name__).warning('Invalid continuity review: %s; response=%r', exc, raw[:2000])
+            if attempt:
+                raise ValueError('La IA no devolvió una revisión de continuidad válida después de dos intentos.') from exc
+            progress('Reintentando el formato de la revisión, sin volver a escribir la historia…')
+            # Repeat the original review with its evidence, not an instruction to
+            # reinterpret a malformed answer as a successful check.
+            messages = [*messages, {'role': 'user', 'content':
+                'La respuesta anterior no tenía el formato requerido. Volvé a revisar los textos. '
+                'Respondé SOLO {"issues": []} si no hay errores, o '
+                '{"issues": ["descripción concreta del error"]}. '
+                'Cada observación debe ser una frase no vacía.'}]
+
+
 def review_and_repair(theme, draft, duration, progress):
     """Bounded semantic review; rejected or malformed reviews never become ready stories."""
     for attempt in range(2):
         draft = validate_story(draft, duration)
         progress('Revisando personajes, hechos y continuidad entre las dos partes…')
-        review = json.loads(complete([
+        issues = request_review([
             {'role': 'system', 'content':
              'Sos editor de continuidad. Compará los DOS textos con el TEMA ORIGINAL. '
              'Detectá solo errores concretos: parentescos o motivos cambiados, pagar confundido '
@@ -251,10 +293,7 @@ def review_and_repair(theme, draft, duration, progress):
              'y explican qué debe corregirse. No reescribas todavía.'},
             {'role': 'user', 'content': json.dumps(
                 {'tema_original': theme, 'parte1': draft['part1'], 'parte2': draft['part2']},
-                ensure_ascii=False)}], json_mode=REVIEW_SCHEMA))
-        issues = review.get('issues') if isinstance(review, dict) else None
-        if not isinstance(issues, list) or any(not isinstance(x, str) or not x.strip() for x in issues):
-            raise ValueError('La IA no devolvió una revisión de continuidad válida.')
+                ensure_ascii=False)}], progress)
         if not issues:
             return draft
         if attempt:

@@ -290,3 +290,33 @@ def test_load_timeout_is_explained_separately(monkeypatch):
     monkeypatch.setattr(story_engine, '_request', request)
     with pytest.raises(story_engine.StoryGenerationError, match='tiempo de carga'):
         story_engine.complete([])
+
+
+def test_review_preserves_structured_findings_and_ignores_empty_placeholder():
+    # Actual shape returned by Qwen in the failed real-model run.
+    finding = {'parte1': 'Mi hermano entró.', 'parte2': 'Mi hermana salió.',
+               'explicación': 'El parentesco cambió.'}
+    issues = story_engine.parse_review(json.dumps({'issues': ['', finding]}))
+    assert len(issues) == 1
+    assert json.loads(issues[0]) == finding
+
+
+@pytest.mark.parametrize('raw', ['{"issues":[""]}', '{"issues":["  "]}', '{"issues":[false]}'])
+def test_empty_or_invalid_review_cannot_approve_story(raw):
+    with pytest.raises(ValueError):
+        story_engine.parse_review(raw)
+
+
+def test_bad_review_format_retries_review_only(monkeypatch):
+    replies = iter(['{"issues":[" "]}', '{"issues":[]}'])
+    calls, progress = [], []
+    def complete(messages, json_mode=False):
+        calls.append(messages)
+        return next(replies)
+    monkeypatch.setattr(story_engine, 'complete', complete)
+    monkeypatch.setattr(story_engine, 'write_episode', lambda *args: pytest.fail('Must not rewrite the story'))
+    draft = sample_story()
+    assert story_engine.review_and_repair('Tema', draft, 45, progress.append) == draft
+    assert len(calls) == 2
+    assert calls[0][1] == calls[1][1]
+    assert any('Reintentando' in message for message in progress)
