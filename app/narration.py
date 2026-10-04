@@ -40,12 +40,10 @@ def narrate(text, folder, storage, progress):
     progress('Preparando la voz en español… La primera vez descarga el modelo.')
     voice = PiperVoice.load(str(ensure_voice(storage)))
     config = SynthesisConfig(length_scale=1.0)
-    # Keep natural short phrases together; word timings within each phrase are estimated.
-    phrases = []
-    for sentence in re.split(r'(?<=[.!?;])\s+|\n+', text.strip()):
-        words = sentence.split()
-        for start in range(0, len(words), 24):
-            phrases.append(' '.join(words[start:start + 24]))
+    # Keep complete sentences so Piper can carry intonation across clauses.
+    # Do not restart the voice every 24 words in the middle of a thought.
+    phrases = [sentence.strip() for sentence in
+               re.split(r'(?<=[.!?;])\s+|\n+', text.strip()) if sentence.strip()]
     audio_path = folder / 'voice.wav'
     captions = []
     elapsed = 0.0

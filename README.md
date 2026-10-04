@@ -175,3 +175,7 @@ Se usa una sola voz masculina (Davefx, español de España) a velocidad normal p
 Las instrucciones del generador priorizan narración indirecta; cuando hay una cita, deben identificar al personaje antes de hablar. La parte 1 corta después de una acción concreta y la parte 2 comienza con su reacción inmediata. Son instrucciones al modelo, no una garantía de calidad: revisá el borrador antes de guardarlo.
 
 Estos cambios se aplican a los renders nuevos. Para escuchar la nueva voz, usá **CREAR LOS DOS VIDEOS**; **Regenerar fondo** conserva el audio anterior. Los textos y MP4 ya guardados no se modifican.
+
+La narración conserva oraciones completas, sin reiniciar la voz cada 24 palabras. Esto evita cortes artificiales dentro de una frase; la expresividad sigue dependiendo de la voz Piper.
+
+Cuando hay al menos dos fondos analizados, la selección alterna obligatoriamente el archivo de origen entre clips, distribuye su uso y rota el fondo inicial de los nuevos videos. Con un único fondo sigue funcionando, reutilizando fragmentos cuando hace falta. Las franjas que ya estén incrustadas en el archivo original no se eliminan automáticamente.

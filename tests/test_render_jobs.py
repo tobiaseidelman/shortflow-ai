@@ -83,6 +83,7 @@ def test_render_failure_releases_lock_and_is_retryable(monkeypatch):
             video=BackgroundVideo(name='Test',path='/unused',status='ready')
             session.add_all([story,video]);session.flush()
             sid=story.id
+            video_id=video.id
             session.add(Clip(source_video_id=video.id,start_time=0,end_time=4,duration=4,
                              motion_score=0,visual_change_score=0,action_onset=0,quality_score=0,
                              hook_score=0,loop_score=0))
@@ -94,6 +95,11 @@ def test_render_failure_releases_lock_and_is_retryable(monkeypatch):
         assert not render_routes._lock.locked()
         assert client.get('/api/render-jobs/missing').status_code==404
         assert client.post('/api/render-jobs',data={}).status_code==400
+        # This fake source must not leak into later real-media integration tests.
+        with SessionLocal() as session:
+            session.query(Clip).filter_by(source_video_id=video_id).delete()
+            session.query(BackgroundVideo).filter_by(id=video_id).delete()
+            session.commit()
 
 
 def test_restart_marks_render_failed():
@@ -101,3 +107,20 @@ def test_restart_marks_render_failed():
         session.add(RenderJob(id='interrupted-render',status='running',story_ids='[]'));session.commit()
     with TestClient(app) as client:
         assert client.get('/api/render-jobs/interrupted-render').json()['status']=='failed'
+
+
+@pytest.mark.parametrize('sources', [2, 3])
+def test_optimizer_alternates_sources_even_with_unequal_scores(sources):
+    clips = [SimpleNamespace(duration=4,similarity_group=str(i),source_video_id=i,
+             times_used=0,hook_score=100 if i==1 else 0,motion_score=100 if i==1 else 0,
+             visual_change_score=100 if i==1 else 0,quality_score=100 if i==1 else 0,
+             cooldown_until=0) for i in range(1,sources+1)]
+    starts = []
+    for generation in range(sources):
+        sequence = optimize(clips, 48, generation)
+        ids = [c.source_video_id for c in sequence]
+        starts.append(ids[0])
+        assert all(a != b for a,b in zip(ids,ids[1:]))
+        assert max(ids.count(i) for i in range(1,sources+1)) - min(ids.count(i) for i in range(1,sources+1)) <= 1
+        assert sum(c.duration for c in sequence) >= 48
+    assert len(set(starts)) == sources

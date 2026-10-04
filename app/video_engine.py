@@ -66,13 +66,27 @@ def optimize(clips, required, generation_no=0, weights=None):
  if not clips: raise ValueError('No hay clips disponibles')
  clips=[c for c in clips if c.duration > 0]
  if not clips: raise ValueError('No hay clips válidos')
+ source_ids=sorted({c.source_video_id for c in clips})
+ first_source=source_ids[generation_no % len(source_ids)]
  slots=max(1,math.ceil(required/min(c.duration for c in clips))); beam=[([],0.0,0.0)]
  for pos in range(slots):
   if all(total >= required for _,_,total in beam): break
   nxt=[]
   for seq,score,total in beam:
    recent=seq[-3:]; groups={c.similarity_group for c in recent}; sources={c.source_video_id for c in recent}
-   candidates=[c for c in clips if c not in recent] or [c for c in clips if not recent or c != recent[-1]] or clips
+   # Alternate source videos before ranking individual clips. A soft score alone
+   # lets a high-scoring source monopolize every short.
+   allowed_sources=set(source_ids)
+   if len(source_ids)>1:
+    if not seq:
+     allowed_sources={first_source}
+    else:
+     allowed_sources.discard(seq[-1].source_video_id)
+     counts={sid:sum(c.source_video_id==sid for c in seq) for sid in allowed_sources}
+     least=min(counts.values())
+     allowed_sources={sid for sid in allowed_sources if counts[sid]==least}
+   pool=[c for c in clips if c.source_video_id in allowed_sources]
+   candidates=[c for c in pool if c not in recent] or [c for c in pool if not recent or c != recent[-1]] or pool
    if total >= required:
     nxt.append((seq,score,total)); continue
    for c in candidates:
