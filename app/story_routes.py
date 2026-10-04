@@ -56,7 +56,11 @@ def run_generation(job_id):
             session.add_all(parts)
             session.flush()
             job.part1_id, job.part2_id = (p.id for p in parts)
-            job.title, job.status, job.message = result['title'], 'ready', 'Las dos partes están listas.'
+            issues = result.get('review_issues', [])
+            job.title = result['title']
+            job.status = 'needs_review' if issues else 'ready'
+            job.message = ('Borrador guardado. Revisá estas observaciones de la IA antes de crear los videos:\n' +
+                           '\n'.join('• ' + issue for issue in issues)) if issues else 'Las dos partes están listas.'
             session.commit()
     except Exception as exc:
         logger.exception('Story generation failed: %s', job_id)

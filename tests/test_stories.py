@@ -249,7 +249,7 @@ def test_continuity_repair_passes_corrected_first_part_to_second(monkeypatch):
     assert reviews[1]['parte2'] == repaired['part2']
 
 
-def test_unresolved_contradictions_fail_after_one_repair(monkeypatch):
+def test_unresolved_contradictions_preserve_draft_after_one_repair(monkeypatch):
     calls = []
     def review(*args, **kwargs):
         calls.append(1)
@@ -258,16 +258,19 @@ def test_unresolved_contradictions_fail_after_one_repair(monkeypatch):
     # Keep the two parts distinct while simulating a reviewer that still rejects them.
     drafts = iter(['Yo ' + sample_story()['part1'], 'Me ' + sample_story()['part2']])
     monkeypatch.setattr(story_engine, 'write_episode', lambda *args: next(drafts))
-    with pytest.raises(story_engine.StoryGenerationError, match='contradicciones'):
-        story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)
+    result = story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)
+    assert result['review_issues'] == ['El personaje aparece en un lugar sin explicación']
+    assert result['part1'].startswith('Yo ')
+    assert result['part2'].startswith('Me ')
     assert len(calls) == 2
 
 
 @pytest.mark.parametrize('review', ['{}', '{"issues": "ninguna"}', '{"issues": [false]}'])
 def test_invalid_review_is_not_treated_as_approval(monkeypatch, review):
     monkeypatch.setattr(story_engine, 'complete', lambda *args, **kwargs: review)
-    with pytest.raises(ValueError, match='revisión'):
-        story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)
+    result = story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)
+    assert result['part1'] == sample_story()['part1']
+    assert 'No se pudo completar' in result['review_issues'][0]
 
 
 def test_review_schema_and_load_wait_are_sent_to_ollama(monkeypatch):
@@ -320,3 +323,32 @@ def test_bad_review_format_retries_review_only(monkeypatch):
     assert len(calls) == 2
     assert calls[0][1] == calls[1][1]
     assert any('Reintentando' in message for message in progress)
+
+
+def test_flagged_story_is_saved_as_editable_draft_and_survives_reload(client, monkeypatch):
+    result = {**sample_story(), 'review_issues': ['Cambió el parentesco entre ambas partes.']}
+    monkeypatch.setattr(story_engine, 'generate_story', lambda *args: result)
+    response = client.post('/api/stories', data={'duration': 45})
+    job_id = response.json()['id']
+    job = client.get('/api/story-generations/' + job_id).json()
+    assert job['status'] == 'needs_review'
+    assert 'Cambió el parentesco' in job['message']
+    assert [p['text'] for p in job['parts']] == [result['part1'], result['part2']]
+    assert not story_routes._generation_lock.locked()
+    part_id = job['parts'][0]['id']
+    assert client.put('/api/stories/' + str(part_id), data={'text': 'Mi texto corregido.'}).status_code == 200
+    reloaded = client.get('/api/story-generations/' + job_id).json()
+    assert reloaded['parts'][0]['text'] == 'Mi texto corregido.'
+    assert reloaded['status'] == 'needs_review'
+    assert any(j['id'] == job_id for j in client.get('/api/story-generations').json())
+
+
+def test_failed_repair_keeps_last_complete_pair(monkeypatch):
+    monkeypatch.setattr(story_engine, 'complete', lambda *args, **kwargs: '{"issues":["El parentesco cambia"]}')
+    def fail(*args):
+        raise story_engine.StoryGenerationError('Sin conexión')
+    monkeypatch.setattr(story_engine, 'write_episode', fail)
+    result = story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)
+    assert result['part1'] == sample_story()['part1']
+    assert result['part2'] == sample_story()['part2']
+    assert result['review_issues'][0] == 'El parentesco cambia'

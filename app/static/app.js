@@ -157,9 +157,11 @@ async function storyRequest(url, options) {
   return data;
 }
 function showStoryPair(job) {
-  if(job.status!=='ready'||job.parts.length!==2)return;
+  if(!['ready','needs_review'].includes(job.status)||job.parts.length!==2)return;
   currentPair=job;
   $('#storyResult').hidden=false;$('#storyTitle').textContent=job.title;
+  $('#storyReview').textContent=job.status==='needs_review'?job.message:'';
+  $('#storyReview').hidden=job.status!=='needs_review';
   job.parts.forEach(part=>{
     $('#storyPart'+part.number).value=part.text;
     $('#part'+part.number+'Words').textContent=part.words+' palabras · aprox. '+part.duration+' segundos';
@@ -181,8 +183,8 @@ async function watchGeneration(id) {
   try {
     while(true) {
       const job=await storyRequest('/api/story-generations/'+encodeURIComponent(id));
-      storyMessage(job.message,job.status==='failed'?'err':job.status==='ready'?'ok':'loading');
-      if(job.status==='ready'){showStoryPair(job);break;}
+      storyMessage(job.message,job.status==='failed'?'err':job.status==='needs_review'?'muted':job.status==='ready'?'ok':'loading');
+      if(['ready','needs_review'].includes(job.status)){showStoryPair(job);break;}
       if(job.status==='failed')break;
       await new Promise(resolve=>setTimeout(resolve,2000));
     }
@@ -202,10 +204,10 @@ async function loadStories(resume=true) {
     stories.forEach(story=>select.add(new Option(story.title,String(story.id))));
     if([...select.options].some(option=>option.value===previous))select.value=previous;
     const container=$('#stories');container.replaceChildren();
-    jobs.filter(job=>job.status==='ready').forEach(job=>{
+    jobs.filter(job=>['ready','needs_review'].includes(job.status)).forEach(job=>{
       const card=document.createElement('div');card.className='saved-story';
       const title=document.createElement('strong');title.textContent=job.title;
-      const detail=document.createElement('p');detail.className='muted';detail.textContent='Parte 1 + Parte 2 · '+job.duration+' segundos por parte';
+      const detail=document.createElement('p');detail.className='muted';detail.textContent=(job.status==='needs_review'?'BORRADOR PARA REVISAR · ':'')+'Parte 1 + Parte 2 · '+job.duration+' segundos por parte';
       const button=document.createElement('button');button.textContent='LEER LAS DOS PARTES';button.onclick=()=>showStoryPair(job);
       card.append(title,detail,button);container.append(card);
     });
@@ -218,7 +220,7 @@ async function loadStories(resume=true) {
       const running=jobs.find(job=>job.status==='running');
       if(running)watchGeneration(running.id);
       else if(jobs[0]?.status==='failed')storyMessage(jobs[0].message,'err');
-      else if(jobs[0]?.status==='ready'&&$('#storyResult').hidden)showStoryPair(jobs[0]);
+      else if(['ready','needs_review'].includes(jobs[0]?.status)&&$('#storyResult').hidden)showStoryPair(jobs[0]);
     }
   } catch(error) {storyMessage(error.message,'err');}
 }

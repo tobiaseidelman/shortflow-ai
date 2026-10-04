@@ -277,11 +277,11 @@ def request_review(messages, progress):
 
 
 def review_and_repair(theme, draft, duration, progress):
-    """Bounded semantic review; rejected or malformed reviews never become ready stories."""
+    """Bounded review; preserve complete drafts with warnings instead of discarding them."""
     for attempt in range(2):
         draft = validate_story(draft, duration)
         progress('Revisando personajes, hechos y continuidad entre las dos partes…')
-        issues = request_review([
+        review_messages = [
             {'role': 'system', 'content':
              'Sos editor de continuidad. Compará los DOS textos con el TEMA ORIGINAL. '
              'Detectá solo errores concretos: parentescos o motivos cambiados, pagar confundido '
@@ -293,27 +293,38 @@ def review_and_repair(theme, draft, duration, progress):
              'y explican qué debe corregirse. No reescribas todavía.'},
             {'role': 'user', 'content': json.dumps(
                 {'tema_original': theme, 'parte1': draft['part1'], 'parte2': draft['part2']},
-                ensure_ascii=False)}], progress)
+                ensure_ascii=False)}]
+        try:
+            issues = request_review(review_messages, progress)
+        except (ValueError, StoryGenerationError) as exc:
+            return {**draft, 'review_issues': ['No se pudo completar la revisión: ' + str(exc)]}
         if not issues:
             return draft
         if attempt:
-            raise StoryGenerationError('El borrador sigue teniendo contradicciones después de corregirlo. '
-                                       'No se guardó como una historia lista. Volvé a generar o precisá el tema.')
+            return {**draft, 'review_issues': issues}
         progress('Corrigiendo las contradicciones encontradas…')
         original = {key: draft[key] for key in ('part1', 'part2')}
+        repaired = dict(draft)
         for key in ('part1', 'part2'):
             context = {'tema_original': theme, 'errores_a_corregir': issues,
                        'borrador_parte1': original['part1'], 'borrador_parte2': original['part2']}
             if key == 'part2':
                 del context['borrador_parte1']
-                context['parte1_definitiva'] = draft['part1']
+                context['parte1_definitiva'] = repaired['part1']
             prompt = (json.dumps(context, ensure_ascii=False) +
                       f'\nCorregí SOLO {key}. Entre {round(duration * 1.7)} y '
                       f'{round(duration * 2.9)} palabras. Conservá los hechos correctos; '
                       'no agregues otra trama. La parte 1 deja el enfrentamiento pendiente; '
                       'la parte 2 retoma la parte 1 definitiva y muestra la consecuencia. Solo prosa.')
-            draft[key] = write_episode([{'role': 'system', 'content': SYSTEM},
-                                        {'role': 'user', 'content': prompt}], duration, progress)
+            try:
+                repaired[key] = write_episode([{'role': 'system', 'content': SYSTEM},
+                                               {'role': 'user', 'content': prompt}], duration, progress)
+            except (ValueError, StoryGenerationError):
+                return {**draft, 'review_issues': issues + ['La corrección automática no terminó; conservamos el borrador anterior.']}
+        try:
+            draft = validate_story(repaired, duration)
+        except ValueError:
+            return {**draft, 'review_issues': issues + ['La corrección automática no pasó las comprobaciones; conservamos el borrador anterior.']}
     raise AssertionError('Unreachable review state')
 
 

@@ -35,7 +35,8 @@ def fake_voice(text,folder,storage,progress):
     return folder/'voice.wav',subtitles,1.0
 
 
-def test_pair_render_edit_and_regeneration_keep_audio(tmp_path,monkeypatch):
+@pytest.mark.parametrize('pair_status', ['ready', 'needs_review'])
+def test_pair_render_edit_and_regeneration_keep_audio(tmp_path,monkeypatch,pair_status):
     if not shutil.which('ffmpeg'):pytest.skip('FFmpeg required')
     monkeypatch.setattr(narration,'narrate',fake_voice)
     source=tmp_path/'source.mp4'
@@ -47,10 +48,10 @@ def test_pair_render_edit_and_regeneration_keep_audio(tmp_path,monkeypatch):
             parts=[Story(title=f'Parte {i}',text='Yo hice mi trabajo.',genre='Reddit',duration_target=30) for i in (1,2)]
             session.add_all(parts);session.flush()
             ids=[p.id for p in parts]
-            session.add(StoryGeneration(id='render-pair',theme='Tema',duration=30,status='ready',title='Par',part1_id=ids[0],part2_id=ids[1]));session.commit()
+            session.add(StoryGeneration(id='render-pair-'+pair_status,theme='Tema',duration=30,status=pair_status,title='Par',part1_id=ids[0],part2_id=ids[1]));session.commit()
         assert client.put(f'/api/stories/{ids[0]}',data={'text':'Yo cambié mi decisión.'}).status_code==200
         assert client.put(f'/api/stories/{ids[0]}',data={'text':'   '}).status_code==400
-        r=client.post('/api/render-jobs',data={'generation_id':'render-pair'})
+        r=client.post('/api/render-jobs',data={'generation_id':'render-pair-'+pair_status})
         assert r.status_code==202
         job=client.get('/api/render-jobs/'+r.json()['id']).json()
         assert job['status']=='ready',job

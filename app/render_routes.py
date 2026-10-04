@@ -99,7 +99,7 @@ def create_job(tasks: BackgroundTasks, story_id: int = Form(0), generation_id: s
             ids = [story_id]
             if generation_id:
                 pair = session.get(StoryGeneration, generation_id)
-                if not pair or pair.status != 'ready':
+                if not pair or pair.status not in ('ready', 'needs_review'):
                     raise HTTPException(404, 'No se encontró una historia completa de dos partes.')
                 ids = [pair.part1_id, pair.part2_id]
             snapshots = []
