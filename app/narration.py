@@ -4,12 +4,12 @@ import re
 import urllib.request
 import wave
 
-VOICE = 'es_MX-ald-medium'
-BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_MX/ald/medium/'
+VOICE = 'es_ES-davefx-medium'
+BASE = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/es/es_ES/davefx/medium/'
 
 
 def ensure_voice(storage):
-    folder = Path(storage) / 'voices'
+    folder = Path(storage) / 'voices' / VOICE
     folder.mkdir(parents=True, exist_ok=True)
     for name in (VOICE + '.onnx', VOICE + '.onnx.json', 'MODEL_CARD'):
         target = folder / name
@@ -39,7 +39,7 @@ def narrate(text, folder, storage, progress):
     folder.mkdir(parents=True, exist_ok=True)
     progress('Preparando la voz en español… La primera vez descarga el modelo.')
     voice = PiperVoice.load(str(ensure_voice(storage)))
-    config = SynthesisConfig(length_scale=0.9)
+    config = SynthesisConfig(length_scale=1.0)
     # Keep natural short phrases together; word timings within each phrase are estimated.
     phrases = []
     for sentence in re.split(r'(?<=[.!?;])\s+|\n+', text.strip()):

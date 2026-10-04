@@ -157,7 +157,7 @@ El contenedor instala Node 22 y `requirements.txt` incluye `yt-dlp[default]`. Fu
 3. Pulsá **CREAR LOS DOS VIDEOS**. Cada parte se guarda como un MP4 vertical de 1080×1920 con audio AAC y subtítulos incrustados.
 4. Podés salir de la pantalla y volver a **Crear Short** para recuperar el progreso y los enlaces. Los videos terminados quedan en Historial.
 
-La voz [Piper](https://github.com/OHF-Voice/piper1-gpl) `es_MX-ald-medium` se descarga una sola vez en `storage/voices`. No envía el texto a un servicio remoto. El modelo usa un conjunto de datos bajo [Unlicense](https://huggingface.co/rhasspy/piper-voices/blob/main/es/es_MX/ald/medium/MODEL_CARD); Piper usa GPL-3.0. La voz y sus licencias quedan junto al modelo. Necesita conexión para la primera descarga.
+La voz [Piper](https://github.com/OHF-Voice/piper1-gpl) `es_ES-davefx-medium` se descarga una sola vez en `storage/voices/es_ES-davefx-medium`. No envía el texto a un servicio remoto. El modelo usa un conjunto de datos bajo [CC0](https://huggingface.co/rhasspy/piper-voices/blob/main/es/es_ES/davefx/medium/MODEL_CARD); Piper usa GPL-3.0. La voz y sus licencias quedan junto al modelo. Necesita conexión para la primera descarga.
 
 La duración final sigue el audio, no recorta la narración al tiempo estimado. Los subtítulos se alinean por frase; los grupos de hasta tres palabras usan tiempos estimados dentro de la frase. **Regenerar fondo** conserva el audio y los subtítulos originales aunque hayas editado después la historia. Para aplicar cambios de texto, generá un video nuevo.
 
@@ -167,3 +167,11 @@ Hay una tarea pesada de historias o videos activa a la vez para evitar agotar la
 ### Archivos grandes desde el navegador
 
 La subida de fondos envía bloques de 4 MB y muestra el porcentaje recibido, hasta 1 GB por archivo. El análisis empieza en segundo plano después de recibir el archivo completo; al volver a Fondos se recupera su estado. Si se corta la conexión durante el envío, seleccioná el mismo archivo en el mismo navegador y volvé a pulsar SUBIR Y ANALIZAR para reanudar. Podés cancelar una subida pendiente para elegir otro archivo. Las subidas sin terminar vencen a las 24 horas y se limpian al reiniciar o al iniciar otra subida. No se publica ningún video en GitHub.
+
+### Estilo de los nuevos videos
+
+Se usa una sola voz masculina (Davefx, español de España) a velocidad normal para ambas partes, independientemente del género del protagonista. Los fondos conservan la imagen completa y su proporción: el espacio sobrante se rellena con una copia desenfocada. No se amplía ni recorta la imagen principal para llenar el formato vertical.
+
+Las instrucciones del generador priorizan narración indirecta; cuando hay una cita, deben identificar al personaje antes de hablar. La parte 1 corta después de una acción concreta y la parte 2 comienza con su reacción inmediata. Son instrucciones al modelo, no una garantía de calidad: revisá el borrador antes de guardarlo.
+
+Estos cambios se aplican a los renders nuevos. Para escuchar la nueva voz, usá **CREAR LOS DOS VIDEOS**; **Regenerar fondo** conserva el audio anterior. Los textos y MP4 ya guardados no se modifican.

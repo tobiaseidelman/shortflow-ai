@@ -38,9 +38,18 @@ Distinguí no querer pagar de no tener dinero, y pagar un servicio de realizar e
 Cada giro nace de una decisión o un hecho ya presentado. No inventes dinero, objetos,
 pruebas ni capacidades para resolver una escena. Respetá quién sabe cada cosa y cuándo.
 Una persona excluida no aparece después dentro del evento sin una explicación.
-Escribí acciones y diálogos concretos, sin repetir gestos ni explicar que hay tensión.
-Parte 1: agravio inmediato, contexto necesario, decisión y enfrentamiento pendiente.
-Parte 2: continúa ese enfrentamiento y muestra su consecuencia, sin otro final pendiente.
+Una sola voz cuenta TODO el relato. Preferí narración indirecta: contá qué hizo o dijo cada
+persona, sin intercambiar parlamentos. Si una cita breve es indispensable, identificá ANTES
+quién habla, por ejemplo «mi madre me dijo: ...». Nunca dejes una réplica sin atribución.
+Contá lo que el narrador siente; los sentimientos ajenos se deducen de acciones o palabras,
+no de leer la mente. Usá lenguaje oral sencillo, acciones concretas y pocos adjetivos.
+Parte 1: agravio inmediato, contexto necesario, decisión y una acción que cambia la escena.
+Terminá justo después de esa acción y ANTES de su respuesta o consecuencia: el corte del
+video crea el suspenso. La última oración debe estar completa. No anuncies una revelación,
+no ocultes información que el narrador ya contó y no uses «en la parte 2», «no vas a creer»,
+«todo cambiaría» ni preguntas al público para fabricar suspenso.
+Parte 2: empieza con la respuesta o consecuencia inmediata de esa MISMA acción, sin resumen,
+salto atrás ni otra introducción. Luego resuelve el conflicto, sin otro final pendiente.
 No fuerces perdones ni venganzas espectaculares. Revisá concordancia y tiempos verbales.
 Entregá solamente la prosa del episodio solicitado."""
 
@@ -218,7 +227,7 @@ def write_episode(messages, duration, progress):
             if count > round(duration * 2.9):
                 instruction = f'Recortá el texto a unas {target} palabras. Eliminá conversaciones repetidas y detalles secundarios; no agregues escenas. Conservá el desenlace.'
             elif count < round(duration * 1.7):
-                instruction = f'Ampliá el texto a unas {target} palabras desarrollando acciones y diálogo, sin repetir hechos.'
+                instruction = f'Ampliá el texto a unas {target} palabras desarrollando acciones y sus consecuencias mediante narración, sin repetir hechos.'
             else:
                 instruction = 'Corregí el punto de vista o la frase incompleta sin cambiar los hechos ni extender el texto.'
             # A fresh editing request prevents the model from rewriting both
@@ -355,7 +364,7 @@ def generate_story(theme, duration, storage, progress):
             '(relación de la otra persona, nombre solo si lo dio el usuario), grievance (agravio concreto), '
             'resource (qué favor o trabajo controla legítimamente el protagonista), '
             'clue (acción temprana que muestra quién hace ese trabajo), cliffhanger '
-            '(la otra persona llega a reclamar ese favor al final de la parte 1), '
+            '(acción concreta al final de la parte 1 cuya reacción abre la parte 2; sin anunciar el suspenso), '
             'outcome (qué solución alternativa pagó o hizo la otra persona tras el NO definitivo). '
             'Todos los campos deben tratar del MISMO aporte. Si fue excluido de un evento, '
             'el protagonista no asiste de pronto a él. Máximo 150 palabras en total.'}], json_mode=True)
@@ -371,9 +380,10 @@ def generate_story(theme, duration, storage, progress):
                   '\nPLAN de los DOS episodios, sin narrarlo como resumen: ' + outline)
         first_prompt = (common + '\nEscribí SOLO la PARTE 1 EN PRIMERA PERSONA. ' + length +
                         'Abrí con el agravio concreto, mostrá el aporte ignorado y la pista mediante acciones '
-                        'y diálogo. El protagonista toma una decisión. No describas la estructura del relato ni escribas '
+                        'narradas por una sola voz. Si citás a alguien, identificá antes quién habla. El protagonista toma una decisión. No describas la estructura del relato ni escribas '
                         '«la confrontación está pendiente», «la tensión era palpable» o «todo cambiaría». Terminá en una acción concreta del enfrentamiento '
-                        'pendiente del plan, sin resolverlo todavía. Solo prosa, sin título ni JSON.')
+                        'del plan, con una oración completa y antes de la reacción: el video se corta ahí. '
+                        'No prometas contar algo después ni agregues una despedida. Solo prosa, sin título ni JSON.')
         progress('Escribiendo la parte 1: conflicto y suspenso…')
         part1 = write_episode([system, {'role': 'user', 'content': first_prompt}], duration, progress)
         second_prompt = ('Continuá con SOLO la PARTE 2 EN PRIMERA PERSONA. ' + length +

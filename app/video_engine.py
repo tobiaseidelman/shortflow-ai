@@ -93,8 +93,14 @@ def render(sequence, video_paths, output, duration, subtitles=None):
   for i,c in enumerate(cycle(sequence)):
    if c.duration <= 0: raise ValueError('Clip vacío')
    take=min(c.duration,remaining); p=tmp/f'p{i}.mp4'
-   vf='scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30'
-   subprocess.run(['ffmpeg','-nostdin','-y','-v','error','-ss',str(c.start_time),'-i',str(video_paths[c.source_video_id]),'-t',str(take),'-an','-vf',vf,'-c:v','libx264','-preset','veryfast','-threads','2','-pix_fmt','yuv420p',str(p)],capture_output=True,check=True,timeout=600)
+   # Normalize display aspect ratio; only the blurred duplicate may be cropped.
+   vf=('scale=trunc(iw*sar/2)*2:ih,setsar=1,split=2[back][front];'
+       '[back]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,'
+       'boxblur=12:2,scale=1080:1920[blur];'
+       '[front]scale=1080:1920:force_original_aspect_ratio=decrease:'
+       'force_divisible_by=2[fit];'
+       '[blur][fit]overlay=(W-w)/2:(H-h)/2,setsar=1,fps=30[out]')
+   subprocess.run(['ffmpeg','-nostdin','-y','-v','error','-ss',str(c.start_time),'-i',str(video_paths[c.source_video_id]),'-t',str(take),'-an','-filter_complex_threads','1','-filter_complex',vf,'-map','[out]','-c:v','libx264','-preset','veryfast','-threads','2','-pix_fmt','yuv420p',str(p)],capture_output=True,check=True,timeout=600)
    pieces.append(p); remaining-=take
    if remaining<=.001: break
   lst=tmp/'concat.txt'; lst.write_text('\n'.join("file '"+p.name+"'" for p in pieces))
