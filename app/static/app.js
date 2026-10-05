@@ -1,5 +1,5 @@
 let selectedStory=0,selectedShort=0;const $=s=>document.querySelector(s);const pages=['dashboard','fondos','historias','crear','editor','historial','config'];
-function show(id){pages.forEach(x=>$('#'+x).classList.toggle('active',x===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));$('#title').textContent=document.querySelector(`button[data-page="${id}"]`).textContent; if(id==='fondos'){loadVideos();resumeImport();resumeUpload();}if(id==='historias'||id==='crear')loadStories();if(id==='crear')resumeRender();if(id==='historial')loadShorts()}
+function show(id){pages.forEach(x=>$('#'+x).classList.toggle('active',x===id));document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));$('#title').textContent=document.querySelector(`button[data-page="${id}"]`).textContent; if(id==='fondos'){loadVideos();resumeImport();resumeUpload();}if(id==='historias'||id==='crear')loadStories();if(['historias','crear','editor'].includes(id))loadBackgroundChoices().catch(()=>{});if(id==='crear')resumeRender();if(id==='historial')loadShorts()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>show(b.dataset.page));
 let activeUpload=false, uploadWatch=null, pendingUpload=null;
 function uploadMessage(text,kind='loading') {
@@ -134,8 +134,8 @@ async function loadVideos() {
   const videos=await storyRequest('/api/videos');const container=$('#videos');container.replaceChildren();
   if(!videos.length){const p=document.createElement('p');p.textContent='No hay fondos todavía.';container.append(p);return;}
   const table=document.createElement('table');table.className='table';
-  const header=table.insertRow();['Nombre','Duración','Resolución','Estado','Clips'].forEach(label=>{const cell=document.createElement('th');cell.textContent=label;header.append(cell);});
-  videos.forEach(video=>{const row=table.insertRow();[video.name,video.duration.toFixed(1)+'s',video.width+'×'+video.height,video.status,video.clips].forEach(value=>row.insertCell().textContent=String(value));});
+  const header=table.insertRow();['Nombre','Duración','Resolución','Estado','Clips','Bordes'].forEach(label=>{const cell=document.createElement('th');cell.textContent=label;header.append(cell);});
+  videos.forEach(video=>{const row=table.insertRow();[video.name,video.duration.toFixed(1)+'s',video.width+'×'+video.height,video.status,video.clips].forEach(value=>row.insertCell().textContent=String(value));const b=document.createElement('button');b.textContent='QUITAR FRANJAS';b.onclick=()=>openFraming(video);row.insertCell().append(b);});
   container.append(table);
   } catch(error){$('#videos').textContent=error.message;}
 }
@@ -243,7 +243,7 @@ async function makePair() {
   if(!currentPair||activeRender)return;
   try {
     await saveStories();show('crear');
-    const fd=new FormData();fd.append('generation_id',currentPair.id);
+    const fd=new FormData();fd.append('generation_id',currentPair.id);await appendBackgroundSelection(fd);
     const job=await storyRequest('/api/render-jobs',{method:'POST',body:fd});
     await watchRender(job.id);
   } catch(error){renderMessage(error.message,'err');}
@@ -252,6 +252,7 @@ async function makeShort() {
   if(activeRender)return;
   const fd=new FormData();const id=$('#storySelect').value;
   try {
+    await appendBackgroundSelection(fd);
     if(id!=='0') {
       fd.append('story_id',id);
       const job=await storyRequest('/api/render-jobs',{method:'POST',body:fd});await watchRender(job.id);
@@ -291,5 +292,49 @@ async function resumeRender() {
 }
 async function loadShorts(){let a=await fetch('/api/shorts').then(r=>r.json());$('#shorts').innerHTML=a.length?`<table class=table><tr><th>ID</th><th>Fecha</th><th>Duración</th><th>Estado</th><th>Clips</th><th></th></tr>${a.map(x=>`<tr><td>#${x.id}</td><td>${new Date(x.created_at).toLocaleString()}</td><td>${x.duration}s</td><td>${x.status}</td><td>${x.sequence.join(', ')}</td><td><button onclick="editShort(${x.id})">Editar</button> ${x.status==='ready'?`<a href=/api/shorts/${x.id}/file>MP4</a>`:''}</td></tr>`).join('')}</table>`:'<p class=muted>No hay generaciones.</p>'}
 function editShort(id){selectedShort=id;show('editor');$('#editorContent').innerHTML=`<h3>Short #${id}</h3><p>Se conserva la historia seleccionada y se genera otra secuencia de fondo. Si este video tiene narración y subtítulos, se conservan sin volver a generarlos.</p><button class=primary onclick="regen(${id})">REGENERAR FONDO</button><div id=regenMsg></div>`}
-async function regen(id){msg('#regenMsg','Regenerando únicamente el fondo…','loading');try{let r=await fetch(`/api/shorts/${id}/regenerate-background`,{method:'POST'}),j=await r.json();if(!r.ok)throw Error(j.detail);msg('#regenMsg',`Listo. <a href="${j.download}">Ver MP4 nuevo</a>`,'ok')}catch(e){msg('#regenMsg',e.message,'err')}}
+async function regen(id){msg('#regenMsg','Regenerando únicamente el fondo…','loading');try{const fd=new FormData();await appendBackgroundSelection(fd);let r=await fetch(`/api/shorts/${id}/regenerate-background`,{method:'POST',body:fd}),j=await r.json();if(!r.ok)throw Error(j.detail);msg('#regenMsg',`Listo. <a href="${j.download}">Ver MP4 nuevo</a>`,'ok')}catch(e){msg('#regenMsg',e.message,'err')}}
 function msg(sel,t,c){$(sel).innerHTML=`<p class=${c}>${t}</p>`}
+
+let backgroundSelection=null, backgroundChoices=[];
+try {const saved=JSON.parse(localStorage.getItem('shortflow-backgrounds'));if(Array.isArray(saved))backgroundSelection=new Set(saved);}catch(error){}
+function drawBackgroundChoices() {
+  document.querySelectorAll('[data-background-picker]').forEach(container=>{
+    container.replaceChildren();
+    const title=document.createElement('h3');title.textContent='Fondos que quiero usar';container.append(title);
+    const hint=document.createElement('p');hint.className='muted';hint.textContent='Marcá uno para usar solo ese video, o varios para intercalar sus clips.';container.append(hint);
+    if(!backgroundChoices.length){const p=document.createElement('p');p.textContent='No hay fondos analizados. Agregalos en Fondos.';container.append(p);}
+    backgroundChoices.forEach(v=>{
+      const label=document.createElement('label');label.className='background-option';
+      const input=document.createElement('input');input.type='checkbox';input.value=v.id;input.checked=backgroundSelection===null||backgroundSelection.has(v.id);
+      input.onchange=()=>{if(backgroundSelection===null)backgroundSelection=new Set(backgroundChoices.map(x=>x.id));if(input.checked)backgroundSelection.add(v.id);else backgroundSelection.delete(v.id);try{localStorage.setItem('shortflow-backgrounds',JSON.stringify([...backgroundSelection]));}catch(error){}drawBackgroundChoices();};
+      label.append(input,document.createTextNode(v.name));container.append(label);
+    });
+  });
+}
+async function loadBackgroundChoices() {
+  try{backgroundChoices=(await storyRequest('/api/videos')).filter(v=>v.status==='ready'&&v.clips>0);drawBackgroundChoices();}
+  catch(error){document.querySelectorAll('[data-background-picker]').forEach(c=>c.textContent='No se pudieron cargar los fondos. Volvé a entrar en esta sección.');throw error;}
+}
+async function appendBackgroundSelection(fd) {
+  await loadBackgroundChoices();
+  const ids=backgroundChoices.filter(v=>backgroundSelection===null||backgroundSelection.has(v.id)).map(v=>v.id);
+  if(!ids.length)throw Error('Marcá al menos un fondo analizado.');
+  fd.append('background_ids',JSON.stringify(ids));
+}
+let framingVideo=null;
+function openFraming(video) {
+  framingVideo=video;$('#framingPanel').hidden=false;$('#framingName').textContent=video.name;
+  $('#sideCrop').value=video.side_percent||0;$('#framingSecond').value=1;$('#framingMsg').textContent='';updateFramingPreview();
+  $('#framingPanel').scrollIntoView({behavior:'smooth',block:'start'});
+}
+function updateFramingPreview() {
+  if(!framingVideo)return;
+  const percent=Number($('#sideCrop').value);$('#cropAmount').textContent=percent+'% de cada lado';
+  $('#framingPreview').src='/api/videos/'+framingVideo.id+'/preview?side_percent='+percent+'&second='+Number($('#framingSecond').value||0);
+}
+async function saveFraming() {
+  if(!framingVideo)return;
+  const fd=new FormData();fd.append('side_percent',$('#sideCrop').value);
+  try{const result=await storyRequest('/api/videos/'+framingVideo.id+'/framing',{method:'PUT',body:fd});framingVideo.side_percent=result.side_percent;$('#framingMsg').textContent='Recorte guardado. Se aplicará al crear videos nuevos o regenerar el fondo.';await loadVideos();}
+  catch(error){$('#framingMsg').textContent=error.message;}
+}

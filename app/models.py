@@ -66,3 +66,15 @@ class UploadJob(Base):
     message: Mapped[str] = mapped_column(Text, default='Subiendo archivo…')
     video_id: Mapped[int | None] = mapped_column(ForeignKey('background_videos.id'), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class BackgroundFraming(Base):
+    __tablename__ = 'background_framing'
+    video_id: Mapped[int] = mapped_column(ForeignKey('background_videos.id'), primary_key=True)
+    side_percent: Mapped[float] = mapped_column(Float, default=0)
+
+
+class ShortBackgrounds(Base):
+    __tablename__ = 'short_backgrounds'
+    short_id: Mapped[int] = mapped_column(ForeignKey('shorts.id'), primary_key=True)
+    video_ids: Mapped[str] = mapped_column(Text)

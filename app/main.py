@@ -8,6 +8,7 @@ from datetime import datetime
 import shutil, json, re, os, subprocess
 from .db import Base, engine, SessionLocal
 from .models import *
+from .background_routes import router as background_router, selected_clips, crop_settings, remember_selection
 from .video_engine import metadata, analyze, optimize, render
 from .story_routes import router as story_router, lifespan, set_storage
 from .render_routes import router as render_router, set_storage as set_render_storage
@@ -29,6 +30,7 @@ app.include_router(story_router)
 app.include_router(import_router)
 app.include_router(upload_router)
 app.include_router(render_router)
+app.include_router(background_router)
 app.mount('/static', StaticFiles(directory=ROOT / 'app/static'), name='static')
 templates = Jinja2Templates(directory=ROOT / 'app/templates')
 ALLOWED = {'.mp4', '.mov', '.webm'}
@@ -62,7 +64,8 @@ def dashboard():
 def videos():
     with db() as s:
         rows = s.query(BackgroundVideo).order_by(BackgroundVideo.id.desc()).all()
-        out = [{'id': v.id, 'name': v.name, 'duration': v.duration, 'width': v.width, 'height': v.height, 'size': v.size, 'status': v.status, 'clips': s.query(Clip).filter_by(source_video_id=v.id).count()} for v in rows]
+        crops = crop_settings(s)
+        out = [{'side_percent': crops.get(v.id, 0), 'id': v.id, 'name': v.name, 'duration': v.duration, 'width': v.width, 'height': v.height, 'size': v.size, 'status': v.status, 'clips': s.query(Clip).filter_by(source_video_id=v.id).count()} for v in rows]
         return out
 
 @app.post('/api/videos/upload')
@@ -116,11 +119,11 @@ def stories():
         return o
 
 @app.post('/api/shorts')
-def create_short(story_id: int=Form(0), duration: float=Form(45, ge=1, le=300)):
+def create_short(story_id: int=Form(0), duration: float=Form(45, ge=1, le=300), background_ids: str=Form('')):
     with db() as s:
         if story_id:
             raise HTTPException(400, 'Usá la generación con voz para una historia.')
-        clips = s.query(Clip).all()
+        clips = selected_clips(s, background_ids)
         if not clips:
             raise HTTPException(400, 'Primero agregá y analizá al menos un video de fondo.')
         gen = s.query(Short).count()
@@ -131,7 +134,8 @@ def create_short(story_id: int=Form(0), duration: float=Form(45, ge=1, le=300)):
         out = OUT / f'short_{sh.id:04d}.mp4'
         paths = {v.id: v.path for v in s.query(BackgroundVideo).all()}
         try:
-            render(seq, paths, out, duration)
+            render(seq, paths, out, duration, crops=crop_settings(s))
+            remember_selection(s, sh.id, clips)
             sh.status = 'ready'
             sh.output_path = str(out)
             for (i, c) in enumerate(seq):
@@ -148,7 +152,7 @@ def create_short(story_id: int=Form(0), duration: float=Form(45, ge=1, le=300)):
         return result
 
 @app.post('/api/shorts/{sid}/regenerate-background')
-def regen(sid: int):
+def regen(sid: int, background_ids: str=Form('')):
     from tempfile import TemporaryDirectory
     from .render_routes import _lock
     from .narration import overlay
@@ -159,14 +163,15 @@ def regen(sid: int):
             sh = s.get(Short, sid)
             if not sh or sh.status != 'ready':
                 raise HTTPException(404, 'Short listo no encontrado')
-            clips = s.query(Clip).all()
+            saved = s.get(ShortBackgrounds, sid)
+            clips = selected_clips(s, background_ids or (saved.video_ids if saved else ''))
             if not clips:
                 raise HTTPException(400, 'No hay fondos disponibles')
             seq = optimize(clips, sh.duration, s.query(Short).count() + 1)
             paths = {v.id: v.path for v in s.query(BackgroundVideo).all()}
             with TemporaryDirectory(prefix='regen-', dir=OUT) as folder:
                 background = Path(folder) / 'background.mp4'
-                render(seq, paths, background, sh.duration)
+                render(seq, paths, background, sh.duration, crops=crop_settings(s))
                 asset = s.get(NarrationAsset, sid)
                 result = background
                 if asset:
@@ -174,6 +179,7 @@ def regen(sid: int):
                     overlay(background, asset.audio_path, asset.subtitle_path, result, sh.duration)
                 out = OUT / f'short_{sid:04d}_regen.mp4'
                 result.replace(out)
+            remember_selection(s, sid, clips)
             sh.output_path = str(out)
             sh.sequence_json = json.dumps([c.id for c in seq])
             s.commit()

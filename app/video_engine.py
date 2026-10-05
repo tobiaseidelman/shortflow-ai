@@ -97,7 +97,7 @@ def optimize(clips, required, generation_no=0, weights=None):
   beam=sorted(nxt,key=lambda x:x[1],reverse=True)[:40]
  best=max(beam,key=lambda x:x[1]+min(x[2],required)*2); return best[0]
 
-def render(sequence, video_paths, output, duration, subtitles=None):
+def render(sequence, video_paths, output, duration, subtitles=None, crops=None):
  from tempfile import TemporaryDirectory
  from itertools import cycle
  if not sequence or duration <= 0 or duration > 600: raise ValueError('Secuencia o duración inválida')
@@ -107,8 +107,11 @@ def render(sequence, video_paths, output, duration, subtitles=None):
   for i,c in enumerate(cycle(sequence)):
    if c.duration <= 0: raise ValueError('Clip vacío')
    take=min(c.duration,remaining); p=tmp/f'p{i}.mp4'
+   percent=(crops or {}).get(c.source_video_id, 0)
+   if not 0 <= percent <= 40: raise ValueError('Recorte lateral inválido')
+   crop=f'crop=iw-2*trunc(iw*{percent}/100/2)*2:ih:trunc(iw*{percent}/100/2)*2:0,' if percent else ''
    # Normalize display aspect ratio; only the blurred duplicate may be cropped.
-   vf=('scale=trunc(iw*sar/2)*2:ih,setsar=1,split=2[back][front];'
+   vf=(crop+'scale=trunc(iw*sar/2)*2:ih,setsar=1,split=2[back][front];'
        '[back]scale=270:480:force_original_aspect_ratio=increase,crop=270:480,'
        'boxblur=12:2,scale=1080:1920[blur];'
        '[front]scale=1080:1920:force_original_aspect_ratio=decrease:'

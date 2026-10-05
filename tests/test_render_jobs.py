@@ -43,7 +43,9 @@ def test_pair_render_edit_and_regeneration_keep_audio(tmp_path,monkeypatch,pair_
     subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=160x90:rate=10','-t','5','-c:v','libx264',str(source)],check=True)
     with TestClient(app) as client:
         with source.open('rb') as f:
-            assert client.post('/api/videos/upload',files={'file':('video.mp4',f,'video/mp4')}).status_code==200
+            uploaded=client.post('/api/videos/upload',files={'file':('video.mp4',f,'video/mp4')})
+            assert uploaded.status_code==200
+            selected_video=uploaded.json()['id']
         with SessionLocal() as session:
             parts=[Story(title=f'Parte {i}',text='Yo hice mi trabajo.',genre='Reddit',duration_target=30) for i in (1,2)]
             session.add_all(parts);session.flush()
@@ -51,11 +53,15 @@ def test_pair_render_edit_and_regeneration_keep_audio(tmp_path,monkeypatch,pair_
             session.add(StoryGeneration(id='render-pair-'+pair_status,theme='Tema',duration=30,status=pair_status,title='Par',part1_id=ids[0],part2_id=ids[1]));session.commit()
         assert client.put(f'/api/stories/{ids[0]}',data={'text':'Yo cambié mi decisión.'}).status_code==200
         assert client.put(f'/api/stories/{ids[0]}',data={'text':'   '}).status_code==400
-        r=client.post('/api/render-jobs',data={'generation_id':'render-pair-'+pair_status})
+        r=client.post('/api/render-jobs',data={'generation_id':'render-pair-'+pair_status,'background_ids':json.dumps([selected_video])})
         assert r.status_code==202
         job=client.get('/api/render-jobs/'+r.json()['id']).json()
         assert job['status']=='ready',job
         assert len(job['shorts'])==2
+        with SessionLocal() as session:
+            for entry in job['shorts']:
+                short=session.get(Short,entry['id'])
+                assert {session.get(Clip,cid).source_video_id for cid in json.loads(short.sequence_json)}=={selected_video}
         sid=job['shorts'][0]['id']
         with SessionLocal() as session:
             asset=session.get(NarrationAsset,sid)

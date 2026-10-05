@@ -21,7 +21,9 @@ with tempfile.TemporaryDirectory() as temp:
   elif path=='/api/story-generations':payload=[pair]
   elif path=='/api/story-generations/pair':payload=pair
   elif path.startswith('/api/stories/') and request.method=='PUT':state['saved']+=1;payload={'status':'saved'}
-  elif path=='/api/videos':payload=[{'id':1,'name':'<script>alert(1)</script>','duration':600,'width':1280,'height':720,'status':'ready','clips':208}]
+  elif path=='/api/videos':payload=[{'id':1,'name':'<script>alert(1)</script>','duration':600,'width':1280,'height':720,'status':'ready','clips':208},{'id':2,'name':'Segundo fondo','duration':600,'width':1280,'height':720,'status':'ready','clips':208}]
+  elif path.endswith('/framing') and request.method=='PUT':payload={'side_percent':22.5}
+  elif path.endswith('/preview'):return route.fulfill(status=200,content_type='image/jpeg',body=b'')
   elif path=='/api/uploads' and request.method=='POST':
    size=request.post_data_json['size'];state['upload']={'id':'upload1','name':'sample.mp4','size':size,'received':0,'status':'uploading','chunk_size':4*1024**2};payload=state['upload']
   elif path=='/api/uploads':payload=[]
@@ -38,6 +40,8 @@ with tempfile.TemporaryDirectory() as temp:
   elif path=='/api/import-url':payload={'id':'import1','status':'running'}
   elif path=='/api/imports/import1':state['imports']+=1;payload={'id':'import1','status':'ready','message':'Fondo importado: 208 clips disponibles.'}
   elif path=='/api/render-jobs' and request.method=='POST':
+   assert 'background_ids' in request.post_data
+   assert '\r\n[1]\r\n' in request.post_data
    state['render_parts']=2 if 'generation_id' in request.post_data else 1;payload={'id':'render1','status':'running'}
   elif path=='/api/render-jobs':payload=[]
   elif path=='/api/render-jobs/render1':payload={'id':'render1','status':'ready','message':'Videos listos con voz y subtítulos.','shorts':[{'id':i,'download':f'/api/shorts/{i}/file'} for i in range(1,state['render_parts']+1)]}
@@ -51,6 +55,11 @@ with tempfile.TemporaryDirectory() as temp:
   page.get_by_role('button',name='Fondos',exact=True).click()
   expect(page.locator('#videos')).to_contain_text('<script>alert(1)</script>')
   assert page.locator('#videos script').count()==0
+  page.get_by_role('button',name='QUITAR FRANJAS',exact=True).first.click()
+  page.locator('#sideCrop').fill('22.5')
+  expect(page.locator('#cropAmount')).to_have_text('22.5% de cada lado')
+  page.get_by_role('button',name='GUARDAR RECORTE',exact=True).click()
+  expect(page.locator('#framingMsg')).to_contain_text('Recorte guardado')
   page.locator('#url').fill('https://youtu.be/J9dvPQuHz-I');page.locator('#rights').check()
   page.get_by_role('button',name='IMPORTAR VIDEO',exact=True).click()
   expect(page.locator('#urlMsg')).to_contain_text('208 clips')
@@ -64,6 +73,11 @@ with tempfile.TemporaryDirectory() as temp:
   page.reload()
   page.get_by_role('button',name='Historias',exact=True).click()
   expect(page.locator('#storyReview')).to_contain_text('Revisá el parentesco')
+  expect(page.locator('#historias [data-background-picker] input')).to_have_count(2)
+  page.locator('#historias [data-background-picker] input[value="2"]').uncheck()
+  page.reload()
+  page.get_by_role('button',name='Historias',exact=True).click()
+  expect(page.locator('#historias [data-background-picker] input[value="2"]')).not_to_be_checked()
   page.locator('#storyPart1').fill('Yo corregí esta parte antes de grabarla.')
   page.get_by_role('button',name='CREAR LOS DOS VIDEOS',exact=True).click()
   expect(page.locator('#makeDownloads a')).to_have_count(2)

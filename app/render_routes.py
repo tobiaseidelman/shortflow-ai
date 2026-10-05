@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
 from .db import SessionLocal
 from .models import Story, StoryGeneration, Short, BackgroundVideo, Clip, RenderJob, NarrationAsset, UsedClip
 from . import narration
+from .background_routes import selected_clips, crop_settings, remember_selection
 from .video_engine import optimize, render
 
 router = APIRouter()
@@ -34,7 +35,7 @@ def serialize(job):
             'shorts': [{'id': sid, 'download': f'/api/shorts/{sid}/file'} for sid in json.loads(job.short_ids)]}
 
 
-def run_job(job_id, snapshots):
+def run_job(job_id, snapshots, background_ids=''):
     def progress(message):
         with SessionLocal() as session:
             session.get(RenderJob, job_id).message = message
@@ -51,12 +52,13 @@ def run_job(job_id, snapshots):
             if duration > 600:
                 raise ValueError('La narración supera 10 minutos. Acortá el texto antes de generar el video.')
             with SessionLocal() as session:
-                clips = session.query(Clip).all()
+                clips = selected_clips(session, background_ids)
                 sequence = optimize(clips, duration, session.query(Short).count())
                 paths = {v.id: v.path for v in session.query(BackgroundVideo).all()}
                 progress(f'Video {index} de {len(snapshots)}: creando fondo, voz y subtítulos…')
                 background = folder / 'background.mp4'
-                render(sequence, paths, background, duration)
+                render(sequence, paths, background, duration, crops=crop_settings(session))
+                remember_selection(session, current_id, clips)
                 output = _storage / 'renders' / f'short_{current_id:04d}.mp4'
                 narration.overlay(background, audio, captions, output, duration)
                 background.unlink(missing_ok=True)
@@ -87,7 +89,7 @@ def run_job(job_id, snapshots):
 
 
 @router.post('/api/render-jobs', status_code=202)
-def create_job(tasks: BackgroundTasks, story_id: int = Form(0), generation_id: str = Form('')):
+def create_job(tasks: BackgroundTasks, story_id: int = Form(0), generation_id: str = Form(''), background_ids: str = Form('')):
     if bool(story_id) == bool(generation_id):
         raise HTTPException(400, 'Elegí una historia o un par de partes.')
     if not _lock.acquire(blocking=False):
@@ -96,6 +98,8 @@ def create_job(tasks: BackgroundTasks, story_id: int = Form(0), generation_id: s
         with SessionLocal() as session:
             if not session.query(Clip).first():
                 raise HTTPException(400, 'Primero importá o subí un fondo de video.')
+            chosen = selected_clips(session, background_ids)
+            background_ids = json.dumps(sorted({c.source_video_id for c in chosen}))
             ids = [story_id]
             if generation_id:
                 pair = session.get(StoryGeneration, generation_id)
@@ -112,7 +116,7 @@ def create_job(tasks: BackgroundTasks, story_id: int = Form(0), generation_id: s
                 snapshots.append({'id': sid, 'text': story.text})
             job = RenderJob(id=str(uuid4()), status='running', message='Preparando videos…', story_ids=json.dumps(ids))
             session.add(job); session.commit(); response = serialize(job)
-        tasks.add_task(run_job, job.id, snapshots)
+        tasks.add_task(run_job, job.id, snapshots, background_ids)
         return response
     except Exception:
         _lock.release()

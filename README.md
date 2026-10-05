@@ -179,3 +179,9 @@ Estos cambios se aplican a los renders nuevos. Para escuchar la nueva voz, usá 
 La narración conserva oraciones completas, sin reiniciar la voz cada 24 palabras. Esto evita cortes artificiales dentro de una frase; la expresividad sigue dependiendo de la voz Piper.
 
 Cuando hay al menos dos fondos analizados, la selección alterna obligatoriamente el archivo de origen entre clips, distribuye su uso y rota el fondo inicial de los nuevos videos. Con un único fondo sigue funcionando, reutilizando fragmentos cuando hace falta. Las franjas que ya estén incrustadas en el archivo original no se eliminan automáticamente.
+
+### Elegir fondos y quitar franjas
+
+En Historias, Crear Short y Editor, **Fondos que quiero usar** permite marcar uno o varios archivos ya analizados. Solo se usan los fondos marcados; varios se intercalan. La elección se recuerda en este navegador. Cada render conserva también su selección para regeneraciones mediante la API sin selección nueva.
+
+En **Fondos → Biblioteca → QUITAR FRANJAS**, ajustá el porcentaje retirado de cada lado y revisá la vista previa en varios segundos. Guardá el recorte. Se aplica solo a ese archivo al crear o regenerar un video; el original no se modifica. El recorte es simétrico y fijo durante todo el fondo, por lo que conviene revisar videos que mezclen distintos encuadres. El relleno desenfocado se genera después de quitar las franjas.
