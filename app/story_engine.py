@@ -50,6 +50,7 @@ no ocultes información que el narrador ya contó y no uses «en la parte 2», �
 «todo cambiaría» ni preguntas al público para fabricar suspenso.
 Parte 2: empieza con la respuesta o consecuencia inmediata de esa MISMA acción, sin resumen,
 salto atrás ni otra introducción. Luego resuelve el conflicto, sin otro final pendiente.
+Cada párrafo debe aportar un hecho, una reacción o una decisión nueva. No repitas la misma acusación con otras palabras ni llenes espacio describiendo miradas, brazos cruzados o tensión.
 No fuerces perdones ni venganzas espectaculares. Revisá concordancia y tiempos verbales.
 Entregá solamente la prosa del episodio solicitado."""
 
@@ -296,7 +297,7 @@ def review_and_repair(theme, draft, duration, progress):
              'Detectá solo errores concretos: parentescos o motivos cambiados, pagar confundido '
              'con trabajar, dinero u objetos sin origen, hechos que se contradicen, cronología '
              'imposible, personajes que saben algo sin enterarse, corte desconectado o desenlace '
-             'ausente. El tema tiene prioridad sobre cualquier invención. No pidas cambios '
+             'ausente, parlamentos sin identificar quién habla ANTES, escenas repetidas sin avanzar o una promesa de revelación que sustituye la acción del corte. El tema tiene prioridad sobre cualquier invención. No pidas cambios '
              'por gusto ni inventes errores. Respondé JSON {"issues": []} si no hay errores. '
              'Si los hay, issues contiene hasta cuatro frases que citan el hecho incorrecto '
              'y explican qué debe corregirse. No reescribas todavía.'},
@@ -352,22 +353,21 @@ def generate_story(theme, duration, storage, progress):
             'No escribas prosa todavía. Respondé solo el JSON solicitado.'}
         outline = complete([planner, {'role': 'user', 'content':
             'Tema del relato: ' + json.dumps(theme, ensure_ascii=False) +
-            '. El protagonista cuenta lo que LE pasó. Alguien lo menosprecia, pero sigue '
-            'necesitando un aporte concreto suyo. El protagonista pone un límite razonable, '
-            'avisa antes y deja de hacer ese favor. La otra persona intenta convencerlo; '
-            'él sostiene el límite y vemos qué tuvo que hacer la otra persona en su lugar. '
-            'El giro consiste en descubrir ese aporte subestimado, no en un objeto misterioso. '
+            '. El protagonista cuenta lo que LE pasó. Construí un conflicto específico de este tema, '
+            'no una plantilla de favores, dinero o venganza. No agregues una boda, un pago ni '
+            'familiares si el tema no los necesita. Cada escena cambia algo: qué sabe alguien, '
+            'qué puede perder o qué decide hacer. Evitá repetir reclamos sin avanzar. '
+            'El giro debe reinterpretar un detalle presentado antes, con una explicación plausible. '
             'Agregá solo los detalles indispensables donde el usuario dejó espacio. '
-            'Sin sabotajes, castigos desproporcionados ni nuevos conflictos al final. '
-            'Usá estos ocho campos JSON de texto, máximo una oración breve por campo: '
-            'title (título), narrator (identidad del protagonista, sin inventar nombre), relationship '
-            '(relación de la otra persona, nombre solo si lo dio el usuario), grievance (agravio concreto), '
-            'resource (qué favor o trabajo controla legítimamente el protagonista), '
-            'clue (acción temprana que muestra quién hace ese trabajo), cliffhanger '
-            '(acción concreta al final de la parte 1 cuya reacción abre la parte 2; sin anunciar el suspenso), '
-            'outcome (qué solución alternativa pagó o hizo la otra persona tras el NO definitivo). '
-            'Todos los campos deben tratar del MISMO aporte. Si fue excluido de un evento, '
-            'el protagonista no asiste de pronto a él. Máximo 150 palabras en total.'}], json_mode=True)
+            'Usá estos ocho campos JSON de texto, máximo dos oraciones breves por campo: '
+            'title (título concreto), narrator (quién cuenta y qué quiere), relationship '
+            '(quién se opone y qué quiere; parentescos exactos del tema), grievance (hecho inicial '
+            'y qué está en juego), resource (hechos fijos: quién sabe qué, de quién es cada objeto '
+            'y quién tiene cada obligación), clue (detalle temprano y cómo se descubre su significado), '
+            'cliffhanger (última acción de parte 1 y reacción INMEDIATA que abre parte 2), '
+            'outcome (decisión final y consecuencia concreta ya ocurrida, coherente con los hechos). '
+            'Ordená los hechos cronológicamente y no cambies su causa. Si alguien es excluido, '
+            'no lo hagas asistir sin explicación. Máximo 220 palabras en total.' }], json_mode=True)
         data = json.loads(outline)
         fields = ('title', 'narrator', 'relationship', 'grievance', 'resource', 'clue', 'cliffhanger', 'outcome')
         if not isinstance(data, dict) or any(not isinstance(data.get(k), str) or not data[k].strip() for k in fields):
@@ -379,7 +379,7 @@ def generate_story(theme, duration, storage, progress):
         common = ('TEMA ORIGINAL (tiene prioridad sobre el plan): ' + json.dumps(theme, ensure_ascii=False) +
                   '\nPLAN de los DOS episodios, sin narrarlo como resumen: ' + outline)
         first_prompt = (common + '\nEscribí SOLO la PARTE 1 EN PRIMERA PERSONA. ' + length +
-                        'Abrí con el agravio concreto, mostrá el aporte ignorado y la pista mediante acciones '
+                        'Abrí con el hecho más fuerte del conflicto, sin describir el clima ni una rutina. Mostrá lo que está en juego y sembrá la pista mediante acciones '
                         'narradas por una sola voz. Si citás a alguien, identificá antes quién habla. El protagonista toma una decisión. No describas la estructura del relato ni escribas '
                         '«la confrontación está pendiente», «la tensión era palpable» o «todo cambiaría». Terminá en una acción concreta del enfrentamiento '
                         'del plan, con una oración completa y antes de la reacción: el video se corta ahí. '
@@ -388,7 +388,7 @@ def generate_story(theme, duration, storage, progress):
         part1 = write_episode([system, {'role': 'user', 'content': first_prompt}], duration, progress)
         second_prompt = ('Continuá con SOLO la PARTE 2 EN PRIMERA PERSONA. ' + length +
                          'Retomá exactamente la última escena, sin resumir el episodio anterior. '
-                         'Mostrá el enfrentamiento prometido, la negociación y la decisión final del plan. '
+                         'Resolvé de inmediato la acción del corte. Mostrá cómo cambia la situación y qué decide el protagonista. Usá el detalle sembrado en la primera parte; no inventes una prueba salvadora. '
                          'Cerrá mostrando una consecuencia YA OCURRIDA, no esperando que en el futuro colaboren. '
                          'No contradigas lo que cada personaje sabía en la primera parte. '
                          'Mismos nombres, género gramatical, parentescos, objetos y hechos. '
