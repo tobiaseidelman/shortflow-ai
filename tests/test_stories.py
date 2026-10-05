@@ -352,3 +352,38 @@ def test_failed_repair_keeps_last_complete_pair(monkeypatch):
     assert result['part1'] == sample_story()['part1']
     assert result['part2'] == sample_story()['part2']
     assert result['review_issues'][0] == 'El parentesco cambia'
+
+
+def test_repetition_is_repaired_instead_of_aborting(monkeypatch):
+    repeated = sample_story()
+    repeated['part2'] = repeated['part1']
+    fixed = sample_story()
+    edits = iter([fixed['part1'], fixed['part2']])
+    monkeypatch.setattr(story_engine, 'request_review', lambda *args: [])
+    monkeypatch.setattr(story_engine, 'write_episode', lambda *args: next(edits))
+    result = story_engine.review_and_repair('Tema', repeated, 45, lambda _: None)
+    assert result == fixed
+
+
+def test_repetition_cannot_be_approved_by_model_and_draft_survives(client, monkeypatch):
+    repeated = sample_story()
+    repeated['part2'] = repeated['part1']
+    monkeypatch.setattr(story_engine, 'request_review', lambda *args: [])
+    monkeypatch.setattr(story_engine, 'write_episode', lambda *args: repeated['part1'])
+    monkeypatch.setattr(story_engine, 'generate_story', lambda *args:
+                        story_engine.review_and_repair('Tema', repeated, 45, lambda _: None))
+    response = client.post('/api/stories', data={'duration':45})
+    job = client.get('/api/story-generations/'+response.json()['id']).json()
+    assert job['status'] == 'needs_review'
+    assert 'frase repetida' in job['message']
+    assert [p['text'] for p in job['parts']] == [repeated['part1'], repeated['part2']]
+
+
+def test_repetition_warning_survives_failed_review(monkeypatch):
+    repeated = sample_story()
+    repeated['part2'] = repeated['part1']
+    def fail(*args):raise ValueError('Respuesta inválida')
+    monkeypatch.setattr(story_engine, 'request_review', fail)
+    result = story_engine.review_and_repair('Tema', repeated, 45, lambda _: None)
+    assert 'frase repetida' in result['review_issues'][0]
+    assert result['part2'] == repeated['part2']

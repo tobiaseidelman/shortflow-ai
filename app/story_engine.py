@@ -138,7 +138,7 @@ def ensure_model(storage, progress):
         raise StoryGenerationError('La descarga de la IA se interrumpió. Volvé a intentarlo para reanudarla.') from exc
 
 
-def validate_story(data, duration):
+def validate_story(data, duration, *, allow_repetition=False):
     if not isinstance(data, dict) or any(not isinstance(data.get(k), str) for k in SCHEMA['required']):
         raise ValueError('La respuesta no contiene un plan, un título y dos partes.')
     result = {k: data[k].strip() for k in SCHEMA['required']}
@@ -154,12 +154,26 @@ def validate_story(data, duration):
             raise ValueError(f'{part} tiene {words} palabras; debe tener entre {low} y {high}.')
         if text.rstrip('”"\'»')[-1:] not in '.!?…':
             raise ValueError(f'{part} termina con una frase cortada.')
-    sentences = [re.sub(r'\W+', ' ', s).strip().lower()
-                 for s in re.split(r'[.!?]+', result['part1'] + ' ' + result['part2'])]
-    long_sentences = [s for s in sentences if len(s.split()) >= 8]
-    if len(set(long_sentences)) != len(long_sentences) or result['part1'] == result['part2']:
+    if not allow_repetition and repetition_issues(result):
         raise ValueError('Las partes contienen frases repetidas.')
     return result
+
+
+def repetition_issues(draft):
+    sentences = [re.sub(r'\W+', ' ', s).strip().lower()
+                 for s in re.split(r'[.!?]+', draft['part1'] + ' ' + draft['part2'])]
+    seen = set()
+    for sentence in sentences:
+        if len(sentence.split()) < 8:
+            continue
+        if sentence in seen:
+            return ['Hay una frase repetida: «' + sentence[:180] +
+                    '». Conservá el hecho una sola vez y continuá con una reacción o consecuencia nueva, sin resumir la primera parte.']
+        seen.add(sentence)
+    if draft['part1'] == draft['part2']:
+        return ['Las dos partes son iguales. La segunda debe continuar la acción y resolver el conflicto.']
+    return []
+
 
 
 def complete(messages, json_mode=False):
@@ -289,7 +303,8 @@ def request_review(messages, progress):
 def review_and_repair(theme, draft, duration, progress):
     """Bounded review; preserve complete drafts with warnings instead of discarding them."""
     for attempt in range(2):
-        draft = validate_story(draft, duration)
+        draft = validate_story(draft, duration, allow_repetition=True)
+        known_issues = repetition_issues(draft)
         progress('Revisando personajes, hechos y continuidad entre las dos partes…')
         review_messages = [
             {'role': 'system', 'content':
@@ -305,9 +320,9 @@ def review_and_repair(theme, draft, duration, progress):
                 {'tema_original': theme, 'parte1': draft['part1'], 'parte2': draft['part2']},
                 ensure_ascii=False)}]
         try:
-            issues = request_review(review_messages, progress)
+            issues = list(dict.fromkeys(known_issues + request_review(review_messages, progress)))
         except (ValueError, StoryGenerationError) as exc:
-            return {**draft, 'review_issues': ['No se pudo completar la revisión: ' + str(exc)]}
+            return {**draft, 'review_issues': known_issues + ['No se pudo completar la revisión: ' + str(exc)]}
         if not issues:
             return draft
         if attempt:
@@ -332,7 +347,7 @@ def review_and_repair(theme, draft, duration, progress):
             except (ValueError, StoryGenerationError):
                 return {**draft, 'review_issues': issues + ['La corrección automática no terminó; conservamos el borrador anterior.']}
         try:
-            draft = validate_story(repaired, duration)
+            draft = validate_story(repaired, duration, allow_repetition=True)
         except ValueError:
             return {**draft, 'review_issues': issues + ['La corrección automática no pasó las comprobaciones; conservamos el borrador anterior.']}
     raise AssertionError('Unreachable review state')
