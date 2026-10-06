@@ -195,3 +195,5 @@ La planificación de historias parte del conflicto específico del tema: ya no o
 Los trabajos nuevos guardan texto, fondos y recortes al comenzar. Si un render falla o Codespaces se reinicia, **RETOMAR TRABAJO** reutiliza las partes terminadas y el audio ya guardado de la parte pendiente. Un archivo de video a medio renderizar se vuelve a crear. Los trabajos antiguos sin estos datos no se pueden retomar, y esta función no reanuda la escritura de historias interrumpidas.
 
 La selección visual prioriza clips menos utilizados y evita volver a elegir intervalos que se superponen mucho dentro del mismo video, cuando existen alternativas. No es un detector semántico de escenas parecidas.
+
+Si el tema queda vacío, la aplicación propone una situación concreta distinta de las últimas cinco sugerencias. Los temas escritos por el usuario siempre tienen prioridad. La evaluación real de relatos de familia, trabajo y convivencia se ejecuta con el marcador `[story-eval]` en el commit; su salida sirve para revisión editorial humana, no certifica calidad automáticamente.

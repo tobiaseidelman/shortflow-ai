@@ -13,6 +13,15 @@ router = APIRouter()
 _generation_lock = compute_lock
 _storage = None
 logger = logging.getLogger(__name__)
+DEFAULT_THEMES = (
+    'Mi compañero de apartamento alquilaba mi habitación cuando yo viajaba. Descubrí una reseña con una foto de mi escritorio. Ambos figuramos en el contrato y quiero recuperar mi privacidad.',
+    'Mi jefa presentó mi propuesta como propia. En una reunión, el cliente me preguntó por un cálculo que solo yo había preparado. El historial del documento conserva mis cambios.',
+    'Mi hermana vendió una bicicleta que le había prestado. Me enteré porque el comprador me escribió para pedirme la factura. Ella decía que yo se la había regalado.',
+    'Un vecino se quejaba del ruido de mi perro, pero yo no tengo mascotas. Al revisar las horas de sus reclamos descubrí quién estaba entrando a mi patio compartido.',
+    'Organicé un viaje con amigos y uno cambió el alojamiento sin consultarnos. La confirmación llegó a mi correo y mostraba que había reservado una habitación privada con el dinero común.',
+    'Mi pareja le contó a su familia que yo había renunciado a mi trabajo para vivir de ella. Durante una cena me pidieron explicaciones. Yo seguía trabajando y pagando mi parte de los gastos.',
+)
+
 
 
 @asynccontextmanager
@@ -93,8 +102,9 @@ def create_story(background_tasks: BackgroundTasks, theme: str = Form('', max_le
         raise HTTPException(409, 'Ya hay una historia o video generándose. Esperá a que termine.')
     try:
         with SessionLocal() as session:
-            job = StoryGeneration(id=str(uuid4()), theme=theme.strip() or
-                                  'Un conflicto cotidiano de convivencia, dinero, familia o trabajo, con un giro creíble.',
+            recent = {row.theme for row in session.query(StoryGeneration).order_by(StoryGeneration.created_at.desc()).limit(5)}
+            suggested = next((item for item in DEFAULT_THEMES if item not in recent), DEFAULT_THEMES[0])
+            job = StoryGeneration(id=str(uuid4()), theme=theme.strip() or suggested,
                                   duration=duration, status='running', message='Preparando la historia…')
             session.add(job)
             session.commit()

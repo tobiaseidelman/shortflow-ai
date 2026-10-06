@@ -387,3 +387,13 @@ def test_repetition_warning_survives_failed_review(monkeypatch):
     result = story_engine.review_and_repair('Tema', repeated, 45, lambda _: None)
     assert 'frase repetida' in result['review_issues'][0]
     assert result['part2'] == repeated['part2']
+
+
+def test_empty_theme_uses_distinct_concrete_premises(client, monkeypatch):
+    monkeypatch.setattr(story_engine, 'generate_story', lambda *args: sample_story())
+    themes=[]
+    for _ in range(3):
+        created=client.post('/api/stories',data={'duration':45}).json()
+        themes.append(client.get('/api/story-generations/'+created['id']).json()['theme'])
+    assert len(set(themes))==3
+    assert all(theme in story_routes.DEFAULT_THEMES for theme in themes)

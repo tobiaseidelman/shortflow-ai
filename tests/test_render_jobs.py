@@ -174,3 +174,13 @@ def test_resume_reuses_audio_and_completed_part_and_preview_is_short(tmp_path,mo
         finally:
             with SessionLocal() as session:
                 session.query(Clip).filter_by(source_video_id=vid).delete();session.query(BackgroundVideo).filter_by(id=vid).delete();session.commit()
+
+
+def test_optimizer_prefers_unused_nonoverlapping_intervals():
+    def clip(start,uses,score):
+        return SimpleNamespace(duration=4,start_time=start,similarity_group=str(start),source_video_id=1,times_used=uses,hook_score=score,motion_score=score,visual_change_score=score,quality_score=score,cooldown_until=0)
+    old=clip(0,10,100);fresh=clip(10,0,50);overlap=clip(11,0,90);other=clip(25,0,20)
+    sequence=optimize([old,fresh,overlap,other],8)
+    assert old not in sequence
+    assert other in sequence
+    assert not (fresh in sequence and overlap in sequence)
