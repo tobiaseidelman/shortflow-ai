@@ -42,9 +42,10 @@ with tempfile.TemporaryDirectory() as temp:
   elif path=='/api/render-jobs' and request.method=='POST':
    assert 'background_ids' in request.post_data
    assert '\r\n[1]\r\n' in request.post_data
-   state['render_parts']=2 if 'generation_id' in request.post_data else 1;payload={'id':'render1','status':'running'}
+   state['preview']='name="preview"\r\n\r\ntrue' in request.post_data
+   state['render_parts']=1 if state['preview'] else 2 if 'generation_id' in request.post_data else 1;payload={'id':'render1','status':'running'}
   elif path=='/api/render-jobs':payload=[]
-  elif path=='/api/render-jobs/render1':payload={'id':'render1','status':'ready','message':'Videos listos con voz y subtítulos.','shorts':[{'id':i,'download':f'/api/shorts/{i}/file'} for i in range(1,state['render_parts']+1)]}
+  elif path=='/api/render-jobs/render1':payload={'id':'render1','preview':state.get('preview',False),'status':'ready','message':'Videos listos con voz y subtítulos.','shorts':[{'id':i,'download':f'/api/shorts/{i}/file'} for i in range(1,state['render_parts']+1)]}
   else:return route.fulfill(status=204,body='')
   return route.fulfill(status=200,content_type='application/json',body=json.dumps(payload))
  with sync_playwright() as p:
@@ -82,6 +83,10 @@ with tempfile.TemporaryDirectory() as temp:
   page.get_by_role('button',name='CREAR LOS DOS VIDEOS',exact=True).click()
   expect(page.locator('#makeDownloads a')).to_have_count(2)
   assert state['saved']==2
+  page.get_by_role('button',name='Historias',exact=True).click()
+  page.locator('#historias').get_by_role('button',name='PROBAR VOZ Y FONDO · 12 S',exact=True).click()
+  expect(page.locator('#makeDownloads video')).to_have_count(1)
+  expect(page.locator('#makeDownloads a')).to_have_count(1)
   page.locator('#storySelect').select_option('11')
   page.get_by_role('button',name='GENERAR SHORT',exact=True).click()
   expect(page.locator('#makeDownloads a')).to_have_count(1)

@@ -239,34 +239,34 @@ async function saveStories() {
   try {await savePart(1);await savePart(2);storyMessage('Cambios guardados.','ok');}
   catch(error){storyMessage(error.message,'err');throw error;}
 }
-async function makePair() {
+async function makePair(preview=false) {
   if(!currentPair||activeRender)return;
   try {
     await saveStories();show('crear');
-    const fd=new FormData();fd.append('generation_id',currentPair.id);await appendBackgroundSelection(fd);
+    const fd=new FormData();fd.append('generation_id',currentPair.id);fd.append('preview',String(preview));await appendBackgroundSelection(fd);
     const job=await storyRequest('/api/render-jobs',{method:'POST',body:fd});
     await watchRender(job.id);
   } catch(error){renderMessage(error.message,'err');}
 }
-async function makeShort() {
+async function makeShort(preview=false) {
   if(activeRender)return;
   const fd=new FormData();const id=$('#storySelect').value;
   try {
     await appendBackgroundSelection(fd);
     if(id!=='0') {
-      fd.append('story_id',id);
+      fd.append('story_id',id);fd.append('preview',String(preview));
       const job=await storyRequest('/api/render-jobs',{method:'POST',body:fd});await watchRender(job.id);
     } else {
-      fd.append('duration',$('#shortDur').value);renderMessage('Generando fondo…');
+      fd.append('duration',preview?12:$('#shortDur').value);renderMessage('Generando fondo…');
       const result=await storyRequest('/api/shorts',{method:'POST',body:fd});
-      renderLinks([{id:result.id,download:result.download}]);
+      renderLinks([{id:result.id,download:result.download}],preview);
     }
   } catch(error){renderMessage(error.message,'err');}
 }
-function renderLinks(shorts) {
+function renderLinks(shorts,preview=false) {
   const container=$('#makeDownloads');container.replaceChildren();
   shorts.forEach((short,index)=>{
-    const link=document.createElement('a');link.href=short.download;link.textContent='Descargar video '+(index+1)+' · MP4';link.className='download-link';container.append(link);
+    const link=document.createElement('a');link.href=short.download;link.textContent=(preview?'Descargar prueba':'Descargar video '+(index+1))+' · MP4';link.className='download-link';container.append(link);if(preview){const video=document.createElement('video');video.controls=true;video.preload='metadata';video.src=short.download;video.style='max-height:420px;max-width:100%';container.append(video);}
   });
 }
 async function watchRender(id) {
@@ -275,7 +275,7 @@ async function watchRender(id) {
   try {
     while(true) {
       const job=await storyRequest('/api/render-jobs/'+encodeURIComponent(id));
-      renderMessage(job.message,job.status==='ready'?'ok':job.status==='failed'?'err':'loading');renderLinks(job.shorts);
+      renderMessage(job.message,job.status==='ready'?'ok':job.status==='failed'?'err':'loading');renderLinks(job.shorts,job.preview);renderResumeButton(job);
       if(job.status!=='running')break;
       await new Promise(resolve=>setTimeout(resolve,2000));
     }
@@ -287,7 +287,7 @@ async function resumeRender() {
   try {
     const jobs=await storyRequest('/api/render-jobs');const running=jobs.find(j=>j.status==='running');
     if(running)watchRender(running.id);
-    else if(jobs[0]){renderMessage(jobs[0].message,jobs[0].status==='ready'?'ok':'err');renderLinks(jobs[0].shorts);}
+    else if(jobs[0]){renderMessage(jobs[0].message,jobs[0].status==='ready'?'ok':'err');renderLinks(jobs[0].shorts,jobs[0].preview);renderResumeButton(jobs[0]);}
   } catch(error){renderMessage('No se pudo recuperar la última generación.','err');}
 }
 async function loadShorts(){let a=await fetch('/api/shorts').then(r=>r.json());$('#shorts').innerHTML=a.length?`<table class=table><tr><th>ID</th><th>Fecha</th><th>Duración</th><th>Estado</th><th>Clips</th><th></th></tr>${a.map(x=>`<tr><td>#${x.id}</td><td>${new Date(x.created_at).toLocaleString()}</td><td>${x.duration}s</td><td>${x.status}</td><td>${x.sequence.join(', ')}</td><td><button onclick="editShort(${x.id})">Editar</button> ${x.status==='ready'?`<a href=/api/shorts/${x.id}/file>MP4</a>`:''}</td></tr>`).join('')}</table>`:'<p class=muted>No hay generaciones.</p>'}
@@ -337,4 +337,12 @@ async function saveFraming() {
   const fd=new FormData();fd.append('side_percent',$('#sideCrop').value);
   try{const result=await storyRequest('/api/videos/'+framingVideo.id+'/framing',{method:'PUT',body:fd});framingVideo.side_percent=result.side_percent;$('#framingMsg').textContent='Recorte guardado. Se aplicará al crear videos nuevos o regenerar el fondo.';await loadVideos();}
   catch(error){$('#framingMsg').textContent=error.message;}
+}
+
+function renderResumeButton(job) {
+  $('#resumeRenderJob')?.remove();
+  if(!job.can_resume)return;
+  const button=document.createElement('button');button.id='resumeRenderJob';button.textContent='RETOMAR TRABAJO';
+  button.onclick=async()=>{if(activeRender)return;button.disabled=true;try{await storyRequest('/api/render-jobs/'+encodeURIComponent(job.id)+'/resume',{method:'POST'});await watchRender(job.id);}catch(error){renderMessage(error.message,'err');button.disabled=false;}};
+  $('#makeMsg').append(button);
 }

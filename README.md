@@ -187,3 +187,11 @@ En Historias, Crear Short y Editor, **Fondos que quiero usar** permite marcar un
 En **Fondos → Biblioteca → QUITAR FRANJAS**, ajustá el porcentaje retirado de cada lado y revisá la vista previa en varios segundos. Guardá el recorte. Se aplica solo a ese archivo al crear o regenerar un video; el original no se modifica. El recorte es simétrico y fijo durante todo el fondo, por lo que conviene revisar videos que mezclen distintos encuadres. El relleno desenfocado se genera después de quitar las franjas.
 
 La planificación de historias parte del conflicto específico del tema: ya no obliga a que todos los relatos traten sobre retirar un favor o negarse a pagar. El plan fija qué sabe cada personaje, pertenencias y obligaciones, una pista previa, el corte y su reacción inmediata. La revisión conjunta comprueba también diálogos sin atribución, escenas repetidas y suspenso que solo promete una revelación. Esto guía al modelo local; sigue siendo necesario revisar la calidad del borrador.
+
+### Prueba corta y recuperación de videos
+
+**PROBAR VOZ Y FONDO · 12 S** crea una muestra de hasta 12 segundos con el comienzo del texto y permite reproducirla en Crear Short. No genera las dos partes completas. La voz sigue siendo Davefx; los subtítulos agrupan palabras según puntuación y longitud y excluyen silencios al principio y final de cada frase. La sincronización dentro de la frase sigue siendo aproximada.
+
+Los trabajos nuevos guardan texto, fondos y recortes al comenzar. Si un render falla o Codespaces se reinicia, **RETOMAR TRABAJO** reutiliza las partes terminadas y el audio ya guardado de la parte pendiente. Un archivo de video a medio renderizar se vuelve a crear. Los trabajos antiguos sin estos datos no se pueden retomar, y esta función no reanuda la escritura de historias interrumpidas.
+
+La selección visual prioriza clips menos utilizados y evita volver a elegir intervalos que se superponen mucho dentro del mismo video, cuando existen alternativas. No es un detector semántico de escenas parecidas.

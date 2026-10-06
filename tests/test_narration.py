@@ -20,3 +20,12 @@ def test_long_sentence_reaches_voice_intact_and_audio_matches_captions(tmp_path,
         assert f.getnframes()/f.getframerate() == duration
     assert abs(duration-2) < .001
     assert '0:00:02.00' in captions.read_text()
+
+
+def test_caption_silence_and_punctuation():
+    import numpy as np
+    raw=np.concatenate([np.zeros(2205),np.full(22050,2000),np.zeros(4410)]).astype('<i2').tobytes()
+    start,end=narration.speech_bounds(raw,22050)
+    assert .08 <= start <= .1
+    assert 1.1 <= end <= 1.12
+    assert narration.caption_groups('Mi madre dijo: no vuelvas, por favor.') == ['Mi madre dijo:', 'no vuelvas,', 'por favor.']

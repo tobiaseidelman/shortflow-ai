@@ -78,3 +78,10 @@ class ShortBackgrounds(Base):
     __tablename__ = 'short_backgrounds'
     short_id: Mapped[int] = mapped_column(ForeignKey('shorts.id'), primary_key=True)
     video_ids: Mapped[str] = mapped_column(Text)
+
+
+class RenderPlan(Base):
+    __tablename__ = 'render_plans'
+    job_id: Mapped[str] = mapped_column(ForeignKey('render_jobs.id'), primary_key=True)
+    payload: Mapped[str] = mapped_column(Text)
+    active_short_id: Mapped[int | None] = mapped_column(Integer, nullable=True)

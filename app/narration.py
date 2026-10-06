@@ -33,6 +33,30 @@ def timestamp(seconds):
     return f'{hours}:{minutes:02}:{sec:02}.{cs:02}'
 
 
+def caption_groups(phrase):
+    groups, words = [], []
+    for word in phrase.split():
+        if words and (len(words)>=4 or len(' '.join(words+[word]))>28):
+            groups.append(' '.join(words));words=[]
+        words.append(word)
+        if word.endswith((',', ';', ':', '.', '?', '!', '…')):
+            groups.append(' '.join(words));words=[]
+    if words:groups.append(' '.join(words))
+    return groups
+
+
+def speech_bounds(raw, sample_rate):
+    """Exclude leading/trailing silence from estimated captions, preserving the audio."""
+    import numpy as np
+    samples=np.frombuffer(raw,dtype='<i2').astype(float)
+    if not len(samples):return 0.,0.
+    step=max(1,round(sample_rate*.01))
+    energy=np.array([np.sqrt(np.mean(samples[i:i+step]**2)) for i in range(0,len(samples),step)])
+    active=np.flatnonzero(energy>max(20,float(energy.max())*.025))
+    if not len(active):return 0.,len(samples)/sample_rate
+    return max(0,(active[0]-1)*step/sample_rate),min(len(samples)/sample_rate,(active[-1]+2)*step/sample_rate)
+
+
 def narrate(text, folder, storage, progress):
     from piper import PiperVoice, SynthesisConfig
     folder = Path(folder)
@@ -55,14 +79,16 @@ def narrate(text, folder, storage, progress):
             raw = b''.join(chunk.audio_int16_bytes for chunk in chunks)
             seconds = len(raw) / (2 * voice.config.sample_rate)
             output.writeframes(raw)
-            words = phrase.split()
-            groups = [' '.join(words[i:i + 3]) for i in range(0, len(words), 3)]
+            groups = caption_groups(phrase)
+            start,stop = speech_bounds(raw,voice.config.sample_rate)
+            cursor = elapsed+start
             weight = sum(len(group) for group in groups) or 1
             for group in groups:
-                end = elapsed + seconds * len(group) / weight
+                end = cursor + (stop-start) * len(group) / weight
                 safe = group.replace('\\', '').replace('{', '').replace('}', '').replace('\n', ' ')
-                captions.append(f'Dialogue: 0,{timestamp(elapsed)},{timestamp(end)},Default,,0,0,0,,{safe}')
-                elapsed = end
+                captions.append(f'Dialogue: 0,{timestamp(cursor)},{timestamp(end)},Default,,0,0,0,,{safe}')
+                cursor = end
+            elapsed += seconds
     if elapsed < 0.2:
         raise ValueError('No se pudo crear una narración audible.')
     header = '''[Script Info]

@@ -130,3 +130,47 @@ def test_optimizer_alternates_sources_even_with_unequal_scores(sources):
         assert max(ids.count(i) for i in range(1,sources+1)) - min(ids.count(i) for i in range(1,sources+1)) <= 1
         assert sum(c.duration for c in sequence) >= 48
     assert len(set(starts)) == sources
+
+
+def test_resume_reuses_audio_and_completed_part_and_preview_is_short(tmp_path,monkeypatch):
+    spoken=[]; overlays=[]
+    def voice(text,folder,storage,progress):
+        spoken.append(text)
+        a,c,_=fake_voice(text,folder,storage,progress)
+        return a,c,30
+    def background(seq,paths,output,duration,**kwargs):Path(output).write_bytes(b'background')
+    def overlay(bg,a,c,output,duration):
+        overlays.append(duration)
+        if len(overlays)==2:raise ValueError('Interrupción de prueba')
+        Path(output).write_bytes(b'video')
+    monkeypatch.setattr(narration,'narrate',voice)
+    monkeypatch.setattr(render_routes,'render',background)
+    monkeypatch.setattr(narration,'overlay',overlay)
+    with TestClient(app) as client:
+        with SessionLocal() as session:
+            v=BackgroundVideo(name='resume',path='/mock',status='ready');session.add(v);session.flush();vid=v.id
+            session.add(Clip(source_video_id=vid,start_time=0,end_time=4,duration=4,motion_score=0,visual_change_score=0,action_onset=0,quality_score=0,hook_score=0,loop_score=0))
+            parts=[Story(title='Resume',text=('Yo cuento '+str(i)+' ')*30,genre='Reddit',duration_target=30) for i in (1,2)]
+            session.add_all(parts);session.flush()
+            session.add(StoryGeneration(id='resume-pair',theme='Tema',duration=30,status='ready',title='Par',part1_id=parts[0].id,part2_id=parts[1].id));session.commit()
+        try:
+            r=client.post('/api/render-jobs',data={'generation_id':'resume-pair','background_ids':json.dumps([vid])})
+            jid=r.json()['id'];job=client.get('/api/render-jobs/'+jid).json()
+            assert job['status']=='failed' and job['can_resume'] and len(job['shorts'])==1
+            first_id=job['shorts'][0]['id']
+            render_routes.recover_renders()
+            # Changing the story after interruption must not change the saved render snapshot.
+            client.put('/api/stories/'+str(parts[1].id),data={'text':'Texto cambiado.'})
+            assert client.post('/api/render-jobs/'+jid+'/resume').status_code==202
+            job=client.get('/api/render-jobs/'+jid).json()
+            assert job['status']=='ready' and len(job['shorts'])==2
+            assert job['shorts'][0]['id']==first_id
+            assert len(spoken)==2
+            assert client.post('/api/render-jobs/'+jid+'/resume').status_code==409
+            r=client.post('/api/render-jobs',data={'generation_id':'resume-pair','background_ids':json.dumps([vid]),'preview':'true'})
+            job=client.get('/api/render-jobs/'+r.json()['id']).json()
+            assert job['preview'] and job['status']=='ready' and len(job['shorts'])==1
+            assert overlays[-1]==12 and len(spoken[-1].split())==32
+        finally:
+            with SessionLocal() as session:
+                session.query(Clip).filter_by(source_video_id=vid).delete();session.query(BackgroundVideo).filter_by(id=vid).delete();session.commit()

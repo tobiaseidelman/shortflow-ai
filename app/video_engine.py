@@ -87,6 +87,15 @@ def optimize(clips, required, generation_no=0, weights=None):
      allowed_sources={sid for sid in allowed_sources if counts[sid]==least}
    pool=[c for c in clips if c.source_video_id in allowed_sources]
    candidates=[c for c in pool if c not in recent] or [c for c in pool if not recent or c != recent[-1]] or pool
+   # Prefer unused time ranges, including overlapping alternatives from the same source.
+   def overlaps(a,b):
+    if a.source_video_id != b.source_video_id: return False
+    start_a=getattr(a,'start_time',0);start_b=getattr(b,'start_time',0)
+    return max(0,min(start_a+a.duration,start_b+b.duration)-max(start_a,start_b)) > min(a.duration,b.duration)*.5
+   fresh=[c for c in candidates if not any(overlaps(c,old) for old in seq)]
+   if fresh: candidates=fresh
+   least_used=min(c.times_used for c in candidates)
+   candidates=[c for c in candidates if c.times_used==least_used]
    if total >= required:
     nxt.append((seq,score,total)); continue
    for c in candidates:
