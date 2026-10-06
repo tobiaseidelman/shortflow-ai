@@ -53,13 +53,13 @@ jobs:
           docker run --rm -v "$PWD:/workspace" -w /workspace shortflow-codespaces
           .venv/bin/python -m scripts.check_story_model --gemma
   story-evaluation:
-    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[story-eval]')
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[story-eval')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        case: [familia, trabajo, convivencia]
+        case: ${{ fromJSON(contains(github.event.head_commit.message, '[story-eval-convivencia]') && '["convivencia"]' || '["familia","trabajo","convivencia"]') }}
     steps:
       - uses: actions/checkout@v4
       - name: Build Codespaces image

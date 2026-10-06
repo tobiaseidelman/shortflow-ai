@@ -138,7 +138,7 @@ def ensure_model(storage, progress):
         raise StoryGenerationError('La descarga de la IA se interrumpió. Volvé a intentarlo para reanudarla.') from exc
 
 
-def validate_story(data, duration, *, allow_repetition=False):
+def validate_story(data, duration, *, allow_repetition=False, allow_length=False):
     if not isinstance(data, dict) or any(not isinstance(data.get(k), str) for k in SCHEMA['required']):
         raise ValueError('La respuesta no contiene un plan, un título y dos partes.')
     result = {k: data[k].strip() for k in SCHEMA['required']}
@@ -150,7 +150,7 @@ def validate_story(data, duration, *, allow_repetition=False):
     for part in ('part1', 'part2'):
         text = result[part]
         words = len(text.split())
-        if not low <= words <= high:
+        if (not allow_length and not low <= words <= high) or (allow_length and not 40 <= words <= 1200):
             raise ValueError(f'{part} tiene {words} palabras; debe tener entre {low} y {high}.')
         if text.rstrip('”"\'»')[-1:] not in '.!?…':
             raise ValueError(f'{part} termina con una frase cortada.')
@@ -214,10 +214,10 @@ def complete(messages, json_mode=False):
         raise StoryGenerationError('La IA local no terminó a tiempo o perdió la conexión. Volvé a intentarlo.') from exc
 
 
-def validate_episode(text, duration):
+def validate_episode(text, duration, *, allow_length=False):
     low, high = round(duration * 1.7), round(duration * 2.9)
     count = len(text.split())
-    if not low <= count <= high:
+    if (not allow_length and not low <= count <= high) or (allow_length and not 40 <= count <= 1200):
         raise ValueError(f'Hay {count} palabras; se necesitan entre {low} y {high}.')
     if text.rstrip('”"\'»')[-1:] not in '.!?…':
         raise ValueError('La última frase está incompleta.')
@@ -235,7 +235,11 @@ def write_episode(messages, duration, progress):
             return validate_episode(text, duration)
         except ValueError as exc:
             if attempt:
-                raise StoryGenerationError('La parte no pasó la revisión: ' + str(exc)) from exc
+                # Duration is approximate; preserve complete prose after one bounded edit.
+                try:
+                    return validate_episode(text, duration, allow_length=True)
+                except ValueError:
+                    raise StoryGenerationError('La parte no pasó la revisión: ' + str(exc)) from exc
             progress('Revisando la extensión y el punto de vista de esta parte…')
             count = len(text.split())
             target = round(duration * 2.3)
@@ -303,7 +307,8 @@ def request_review(messages, progress):
 def review_and_repair(theme, draft, duration, progress):
     """Bounded review; preserve complete drafts with warnings instead of discarding them."""
     for attempt in range(2):
-        draft = validate_story(draft, duration, allow_repetition=True)
+        draft = validate_story(draft, duration, allow_repetition=True, allow_length=True)
+        length_notes = [f'La parte {number} tiene {len(draft[key].split())} palabras: su duración puede diferir de los {duration} segundos pedidos.' for number,key in ((1,'part1'),(2,'part2')) if not round(duration*1.7) <= len(draft[key].split()) <= round(duration*2.9)]
         known_issues = repetition_issues(draft)
         progress('Revisando personajes, hechos y continuidad entre las dos partes…')
         review_messages = [
@@ -322,11 +327,11 @@ def review_and_repair(theme, draft, duration, progress):
         try:
             issues = list(dict.fromkeys(known_issues + request_review(review_messages, progress)))
         except (ValueError, StoryGenerationError) as exc:
-            return {**draft, 'review_issues': known_issues + ['No se pudo completar la revisión: ' + str(exc)]}
+            return {**draft, 'review_issues': length_notes + known_issues + ['No se pudo completar la revisión: ' + str(exc)]}
         if not issues:
-            return draft
+            return {**draft, 'review_issues': length_notes} if length_notes else draft
         if attempt:
-            return {**draft, 'review_issues': issues}
+            return {**draft, 'review_issues': length_notes + issues}
         progress('Corrigiendo las contradicciones encontradas…')
         original = {key: draft[key] for key in ('part1', 'part2')}
         repaired = dict(draft)
@@ -345,11 +350,11 @@ def review_and_repair(theme, draft, duration, progress):
                 repaired[key] = write_episode([{'role': 'system', 'content': SYSTEM},
                                                {'role': 'user', 'content': prompt}], duration, progress)
             except (ValueError, StoryGenerationError):
-                return {**draft, 'review_issues': issues + ['La corrección automática no terminó; conservamos el borrador anterior.']}
+                return {**draft, 'review_issues': length_notes + issues + ['La corrección automática no terminó; conservamos el borrador anterior.']}
         try:
-            draft = validate_story(repaired, duration, allow_repetition=True)
+            draft = validate_story(repaired, duration, allow_repetition=True, allow_length=True)
         except ValueError:
-            return {**draft, 'review_issues': issues + ['La corrección automática no pasó las comprobaciones; conservamos el borrador anterior.']}
+            return {**draft, 'review_issues': length_notes + issues + ['La corrección automática no pasó las comprobaciones; conservamos el borrador anterior.']}
     raise AssertionError('Unreachable review state')
 
 

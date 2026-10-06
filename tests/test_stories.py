@@ -397,3 +397,15 @@ def test_empty_theme_uses_distinct_concrete_premises(client, monkeypatch):
         themes.append(client.get('/api/story-generations/'+created['id']).json()['theme'])
     assert len(set(themes))==3
     assert all(theme in story_routes.DEFAULT_THEMES for theme in themes)
+
+
+def test_short_but_complete_episode_survives_duration_revision(monkeypatch):
+    text='Yo '+ ' '.join('palabra'+str(i) for i in range(83))+'.'
+    monkeypatch.setattr(story_engine,'complete',lambda *args:text)
+    assert story_engine.write_episode([],60,lambda _:None)==text
+    draft={**sample_story(60),'part1':text}
+    monkeypatch.setattr(story_engine,'request_review',lambda *args:[])
+    result=story_engine.review_and_repair('Tema',draft,60,lambda _:None)
+    assert result['part1']==text
+    assert 'duración' in result['review_issues'][0]
+    with pytest.raises(ValueError):story_engine.validate_story(draft,60)
