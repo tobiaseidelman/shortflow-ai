@@ -19,9 +19,9 @@ if __name__ == '__main__':
         return response
     story_engine.complete = inspect_call
     original_validate = story_engine.validate_story
-    def inspect_sample(data, duration):
+    def inspect_sample(data, duration, **kwargs):
         print('Borrador de prueba:', json.dumps(data, ensure_ascii=False), flush=True)
-        return original_validate(data, duration)
+        return original_validate(data, duration, **kwargs)
     story_engine.validate_story = inspect_sample
     try:
         with tempfile.TemporaryDirectory(prefix='shortflow-model-') as storage:

@@ -66,15 +66,22 @@ def narrate(text, folder, storage, progress):
     config = SynthesisConfig(length_scale=1.0)
     # Keep complete sentences so Piper can carry intonation across clauses.
     # Do not restart the voice every 24 words in the middle of a thought.
-    phrases = [sentence.strip() for sentence in
-               re.split(r'(?<=[.!?;])\s+|\n+', text.strip()) if sentence.strip()]
+    phrases = []
+    for paragraph in re.split(r'\n\s*\n', text.strip()):
+        sentences = [s.strip() for s in re.split(r'(?<=[.!?;])\s+|\n+', paragraph) if s.strip()]
+        for i, sentence in enumerate(sentences):
+            phrases.append((sentence, .16 if phrases and i == 0 else 0))
     audio_path = folder / 'voice.wav'
     captions = []
     elapsed = 0.0
     progress('Creando la narración y los subtítulos…')
     with wave.open(str(audio_path), 'wb') as output:
         output.setnchannels(1); output.setsampwidth(2); output.setframerate(voice.config.sample_rate)
-        for phrase in phrases:
+        for phrase, pause in phrases:
+            silence_frames = round(pause * voice.config.sample_rate)
+            if silence_frames:
+                output.writeframes(b'\0\0' * silence_frames)
+                elapsed += silence_frames / voice.config.sample_rate
             chunks = list(voice.synthesize(phrase, syn_config=config))
             raw = b''.join(chunk.audio_int16_bytes for chunk in chunks)
             seconds = len(raw) / (2 * voice.config.sample_rate)

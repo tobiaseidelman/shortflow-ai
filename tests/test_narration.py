@@ -29,3 +29,17 @@ def test_caption_silence_and_punctuation():
     assert .08 <= start <= .1
     assert 1.1 <= end <= 1.12
     assert narration.caption_groups('Mi madre dijo: no vuelvas, por favor.') == ['Mi madre dijo:', 'no vuelvas,', 'por favor.']
+
+
+def test_paragraph_pause_is_in_audio_and_caption_clock(tmp_path,monkeypatch):
+    import piper
+    def synthesize(text,syn_config):
+        yield SimpleNamespace(audio_int16_bytes=b'\x01\x00'*22050)
+    monkeypatch.setattr(narration,'ensure_voice',lambda _:tmp_path/'voice.onnx')
+    monkeypatch.setattr(piper.PiperVoice,'load',lambda _:SimpleNamespace(config=SimpleNamespace(sample_rate=22050),synthesize=synthesize))
+    audio,captions,duration=narration.narrate('Mi hermano llegó.\n\nMi madre esperó.',tmp_path/'out',tmp_path,lambda _:None)
+    assert abs(duration-2.16)<.001
+    with wave.open(str(audio)) as f:
+        f.setpos(22050)
+        assert f.readframes(3528)==b'\0\0'*3528
+    assert '0:00:01.16' in captions.read_text()

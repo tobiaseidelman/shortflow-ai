@@ -197,3 +197,5 @@ Los trabajos nuevos guardan texto, fondos y recortes al comenzar. Si un render f
 La selección visual prioriza clips menos utilizados y evita volver a elegir intervalos que se superponen mucho dentro del mismo video, cuando existen alternativas. No es un detector semántico de escenas parecidas.
 
 Si el tema queda vacío, la aplicación propone una situación concreta distinta de las últimas cinco sugerencias. Los temas escritos por el usuario siempre tienen prioridad. La evaluación real de relatos de familia, trabajo y convivencia se ejecuta con el marcador `[story-eval]` en el commit; su salida sirve para revisión editorial humana, no certifica calidad automáticamente.
+
+La voz agrega una pausa breve de 160 ms entre párrafos; el reloj de subtítulos incluye esa pausa. Tras una corrección de extensión, se conservan relatos completos de 40–1200 palabras por parte aunque se aparten del objetivo de duración, con una advertencia visible. Las frases truncadas y las respuestas vacías siguen rechazándose.
