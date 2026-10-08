@@ -44,7 +44,8 @@ with tempfile.TemporaryDirectory() as temp:
    assert '\r\n[1]\r\n' in request.post_data
    state['preview']='name="preview"\r\n\r\ntrue' in request.post_data
    state['render_parts']=1 if state['preview'] else 2 if 'generation_id' in request.post_data else 1;payload={'id':'render1','status':'running'}
-  elif path=='/api/render-jobs':payload=[]
+  elif path=='/api/shorts' and request.method=='POST':payload={'id':99,'download':'/api/shorts/99/file'}
+  elif path=='/api/render-jobs':payload=[{'id':'old','status':'ready','message':'Videos listos con voz y subtítulos.','shorts':[{'id':1,'download':'/api/shorts/1/file'}]}]
   elif path=='/api/render-jobs/render1':payload={'id':'render1','preview':state.get('preview',False),'status':'ready','message':'Videos listos con voz y subtítulos.','shorts':[{'id':i,'download':f'/api/shorts/{i}/file'} for i in range(1,state['render_parts']+1)]}
   else:return route.fulfill(status=204,body='')
   return route.fulfill(status=200,content_type='application/json',body=json.dumps(payload))
@@ -90,6 +91,23 @@ with tempfile.TemporaryDirectory() as temp:
   page.locator('#storySelect').select_option('11')
   page.get_by_role('button',name='GENERAR SHORT',exact=True).click()
   expect(page.locator('#makeDownloads a')).to_have_count(1)
+  page.locator('#storySelect').select_option('0')
+  expect(page.locator('#shortPreview')).to_have_text('PROBAR FONDO · 12 S')
+  page.get_by_role('button',name='GENERAR SHORT',exact=True).click()
+  expect(page.locator('#makeMsg')).to_contain_text('Fondo listo, sin voz ni subtítulos.')
+  expect(page.locator('#makeDownloads a')).to_have_attribute('href','/api/shorts/99/file')
+  page.evaluate('resumeRender()')
+  expect(page.locator('#makeDownloads a')).to_have_attribute('href','/api/shorts/99/file')
+  # A delayed restoration response must not overwrite a newly started render.
+  page.evaluate('''async () => {
+    const original=storyRequest; let release;
+    storyRequest=(...args)=>args[0]==='/api/render-jobs'?new Promise(r=>release=r):original(...args);
+    const pending=resumeRender(); beginRender();
+    renderMessage('Generando fondo…');
+    release([{id:'stale',status:'running',message:'Anterior',shorts:[]}]);
+    await pending; storyRequest=original; renderStarting=false;
+  }''')
+  expect(page.locator('#makeMsg')).to_contain_text('Generando fondo…')
   page.get_by_role('button',name='Fondos',exact=True).click()
   page.locator('#file').set_input_files({'name':'sample.mp4','mimeType':'video/mp4','buffer':b'x'*(9*1024**2)})
   page.get_by_role('button',name='SUBIR Y ANALIZAR',exact=True).click()

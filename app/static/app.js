@@ -203,6 +203,7 @@ async function loadStories(resume=true) {
     select.replaceChildren(new Option('Sin historia / solo fondo','0'));
     stories.forEach(story=>select.add(new Option(story.title,String(story.id))));
     if([...select.options].some(option=>option.value===previous))select.value=previous;
+    updatePreviewLabel();
     const container=$('#stories');container.replaceChildren();
     jobs.filter(job=>['ready','needs_review'].includes(job.status)).forEach(job=>{
       const card=document.createElement('div');card.className='saved-story';
@@ -224,7 +225,9 @@ async function loadStories(resume=true) {
     }
   } catch(error) {storyMessage(error.message,'err');}
 }
-let activeRender=null;
+let activeRender=null,renderStarting=false,renderEpoch=0;
+function beginRender(){renderStarting=true;renderEpoch++;renderLinks([]);$('#resumeRenderJob')?.remove();}
+function updatePreviewLabel(){$('#shortPreview').textContent=$('#storySelect').value==='0'?'PROBAR FONDO · 12 S':'PROBAR VOZ Y FONDO · 12 S';}
 function renderMessage(text,kind='loading') {
   const p=document.createElement('p');p.className=kind;p.textContent=text;$('#makeMsg').replaceChildren(p);
 }
@@ -240,16 +243,19 @@ async function saveStories() {
   catch(error){storyMessage(error.message,'err');throw error;}
 }
 async function makePair(preview=false) {
-  if(!currentPair||activeRender)return;
+  if(!currentPair||activeRender||renderStarting)return;
+  beginRender();
   try {
     await saveStories();show('crear');
     const fd=new FormData();fd.append('generation_id',currentPair.id);fd.append('preview',String(preview));await appendBackgroundSelection(fd);
     const job=await storyRequest('/api/render-jobs',{method:'POST',body:fd});
     await watchRender(job.id);
   } catch(error){renderMessage(error.message,'err');}
+  finally{renderStarting=false;}
 }
 async function makeShort(preview=false) {
-  if(activeRender)return;
+  if(activeRender||renderStarting)return;
+  beginRender();
   const fd=new FormData();const id=$('#storySelect').value;
   try {
     await appendBackgroundSelection(fd);
@@ -260,8 +266,10 @@ async function makeShort(preview=false) {
       fd.append('duration',preview?12:$('#shortDur').value);renderMessage('Generando fondo…');
       const result=await storyRequest('/api/shorts',{method:'POST',body:fd});
       renderLinks([{id:result.id,download:result.download}],preview);
+      renderMessage(preview?'Prueba de fondo lista, sin voz ni subtítulos.':'Fondo listo, sin voz ni subtítulos.','ok');
     }
   } catch(error){renderMessage(error.message,'err');}
+  finally{renderStarting=false;}
 }
 function renderLinks(shorts,preview=false) {
   const container=$('#makeDownloads');container.replaceChildren();
@@ -283,12 +291,14 @@ async function watchRender(id) {
   finally{activeRender=null;}
 }
 async function resumeRender() {
-  if(activeRender)return;
+  if(activeRender||renderStarting)return;
+  const epoch=renderEpoch;
   try {
     const jobs=await storyRequest('/api/render-jobs');const running=jobs.find(j=>j.status==='running');
+    if(epoch!==renderEpoch||activeRender||renderStarting)return;
     if(running)watchRender(running.id);
-    else if(jobs[0]){renderMessage(jobs[0].message,jobs[0].status==='ready'?'ok':'err');renderLinks(jobs[0].shorts,jobs[0].preview);renderResumeButton(jobs[0]);}
-  } catch(error){renderMessage('No se pudo recuperar la última generación.','err');}
+    else if(jobs[0]?.status==='failed'&&!$('#makeDownloads a')){renderMessage(jobs[0].message,jobs[0].status==='ready'?'ok':'err');renderLinks(jobs[0].shorts,jobs[0].preview);renderResumeButton(jobs[0]);}
+  } catch(error){if(epoch===renderEpoch&&!renderStarting&&!activeRender)renderMessage('No se pudo recuperar la última generación.','err');}
 }
 async function loadShorts(){let a=await fetch('/api/shorts').then(r=>r.json());$('#shorts').innerHTML=a.length?`<table class=table><tr><th>ID</th><th>Fecha</th><th>Duración</th><th>Estado</th><th>Clips</th><th></th></tr>${a.map(x=>`<tr><td>#${x.id}</td><td>${new Date(x.created_at).toLocaleString()}</td><td>${x.duration}s</td><td>${x.status}</td><td>${x.sequence.join(', ')}</td><td><button onclick="editShort(${x.id})">Editar</button> ${x.status==='ready'?`<a href=/api/shorts/${x.id}/file>MP4</a>`:''}</td></tr>`).join('')}</table>`:'<p class=muted>No hay generaciones.</p>'}
 function editShort(id){selectedShort=id;show('editor');$('#editorContent').innerHTML=`<h3>Short #${id}</h3><p>Se conserva la historia seleccionada y se genera otra secuencia de fondo. Si este video tiene narración y subtítulos, se conservan sin volver a generarlos.</p><button class=primary onclick="regen(${id})">REGENERAR FONDO</button><div id=regenMsg></div>`}
