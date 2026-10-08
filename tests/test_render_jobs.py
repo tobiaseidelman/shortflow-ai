@@ -15,8 +15,8 @@ from app.video_engine import optimize, metadata
 
 def test_optimizer_handles_one_short_clip():
     c=SimpleNamespace(duration=4,similarity_group='a',source_video_id=1,times_used=0,hook_score=70,motion_score=50,visual_change_score=30,quality_score=40,cooldown_until=0)
-    sequence=optimize([c],30)
-    assert sum(x.duration for x in sequence)>=30
+    with pytest.raises(ValueError,match='sin repetir'):
+        optimize([c],30)
 
 
 def test_invalid_render_duration_and_upload():
@@ -120,7 +120,7 @@ def test_optimizer_alternates_sources_even_with_unequal_scores(sources):
     clips = [SimpleNamespace(duration=4,similarity_group=str(i),source_video_id=i,
              times_used=0,hook_score=100 if i==1 else 0,motion_score=100 if i==1 else 0,
              visual_change_score=100 if i==1 else 0,quality_score=100 if i==1 else 0,
-             cooldown_until=0) for i in range(1,sources+1)]
+             cooldown_until=0,start_time=j*4) for i in range(1,sources+1) for j in range(12)]
     starts = []
     for generation in range(sources):
         sequence = optimize(clips, 48, generation)
@@ -149,7 +149,7 @@ def test_resume_reuses_audio_and_completed_part_and_preview_is_short(tmp_path,mo
     with TestClient(app) as client:
         with SessionLocal() as session:
             v=BackgroundVideo(name='resume',path='/mock',status='ready');session.add(v);session.flush();vid=v.id
-            session.add(Clip(source_video_id=vid,start_time=0,end_time=4,duration=4,motion_score=0,visual_change_score=0,action_onset=0,quality_score=0,hook_score=0,loop_score=0))
+            session.add(Clip(source_video_id=vid,start_time=0,end_time=60,duration=60,motion_score=0,visual_change_score=0,action_onset=0,quality_score=0,hook_score=0,loop_score=0))
             parts=[Story(title='Resume',text=('Yo cuento '+str(i)+' ')*30,genre='Reddit',duration_target=30) for i in (1,2)]
             session.add_all(parts);session.flush()
             session.add(StoryGeneration(id='resume-pair',theme='Tema',duration=30,status='ready',title='Par',part1_id=parts[0].id,part2_id=parts[1].id));session.commit()
@@ -184,3 +184,16 @@ def test_optimizer_prefers_unused_nonoverlapping_intervals():
     assert old not in sequence
     assert other in sequence
     assert not (fresh in sequence and overlap in sequence)
+
+
+def test_optimizer_never_repeats_even_partially_overlapping_ranges():
+    def clip(start,source=1):
+        return SimpleNamespace(duration=10,start_time=start,source_video_id=source,times_used=0,similarity_group='',hook_score=50,motion_score=50,visual_change_score=50,quality_score=50,cooldown_until=0)
+    clips=[clip(0),clip(9),clip(10),clip(20),clip(0,2)]
+    sequence=optimize(clips,40)
+    for i,a in enumerate(sequence):
+        for b in sequence[i+1:]:
+            if a.source_video_id==b.source_video_id:
+                assert min(a.start_time+10,b.start_time+10)<=max(a.start_time,b.start_time)
+    with pytest.raises(ValueError,match='sin repetir'):
+        optimize(clips,50)

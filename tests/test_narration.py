@@ -9,6 +9,7 @@ def test_long_sentence_reaches_voice_intact_and_audio_matches_captions(tmp_path,
     sentence = ('Mi hermano quería que pagara toda la comida de su boda pero cuando le pregunté '
                 'si podía llevar a mi pareja me explicó que ni siquiera había reservado un lugar para mí.')
     def synthesize(text, syn_config):
+        assert syn_config.length_scale == .93
         spoken.append(text)
         yield SimpleNamespace(audio_int16_bytes=b'\x01\x00' * 22050)
     monkeypatch.setattr(narration, 'ensure_voice', lambda _: tmp_path/'voice.onnx')

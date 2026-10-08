@@ -63,7 +63,7 @@ def narrate(text, folder, storage, progress):
     folder.mkdir(parents=True, exist_ok=True)
     progress('Preparando la voz en español… La primera vez descarga el modelo.')
     voice = PiperVoice.load(str(ensure_voice(storage)))
-    config = SynthesisConfig(length_scale=1.0)
+    config = SynthesisConfig(length_scale=0.93)
     # Keep complete sentences so Piper can carry intonation across clauses.
     # Do not restart the voice every 24 words in the middle of a thought.
     phrases = []

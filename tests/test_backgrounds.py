@@ -72,3 +72,48 @@ def test_crop_preview_and_render_remove_baked_in_borders(tmp_path):
     # Both the foreground AND blurred fill must come from the cropped image.
     assert result[:,:,2].mean()<15
     assert result[:,:,1].mean()>180
+
+
+def test_analysis_keeps_shots_and_does_not_cut_ordinary_motion(monkeypatch):
+    from app import video_engine
+    monkeypatch.setattr(video_engine,'metadata',lambda _: {'duration':30})
+    samples=[(i*.35,2,6,100) for i in range(86)]
+    samples[43]=(15.05,2,80,100)
+    monkeypatch.setattr(video_engine,'_sample',lambda _:samples)
+    clips=video_engine.analyze('unused')
+    assert [(c['start_time'],c['end_time']) for c in clips]==[(0,15.05),(15.05,30)]
+    samples[43]=(15.05,2,8,100)
+    assert len(video_engine.analyze('unused'))==1
+
+
+def test_reanalysis_preserves_history_and_replaces_selection(monkeypatch):
+    from app import video_engine
+    from app.models import BackgroundAnalysis
+    from app.background_routes import selected_clips
+    from app.work_lock import compute_lock
+    fields=dict(start_time=0,end_time=20,duration=20,motion_score=1,visual_change_score=1,action_onset=0,quality_score=1,hook_score=1,loop_score=1)
+    monkeypatch.setattr(video_engine,'analyze',lambda _: [fields])
+    with SessionLocal() as session:
+        v=BackgroundVideo(name='old-analysis',path='/mock',status='ready');session.add(v);session.flush();vid=v.id
+        old=Clip(source_video_id=vid,**fields);session.add(old);session.flush();old_id=old.id;session.commit()
+    try:
+        with TestClient(app) as client:
+            assert client.post(f'/api/videos/{vid}/reanalyze').status_code==202
+            assert client.get(f'/api/videos/{vid}/analysis').json()['status']=='ready'
+            assert not compute_lock.locked()
+            with SessionLocal() as session:
+                assert session.get(Clip,old_id) is not None
+                selected=selected_clips(session,json.dumps([vid]))
+                assert len(selected)==1 and selected[0].id!=old_id
+            def fail(_):raise ValueError('bad video')
+            monkeypatch.setattr(video_engine,'analyze',fail)
+            client.post(f'/api/videos/{vid}/reanalyze')
+            assert client.get(f'/api/videos/{vid}/analysis').json()['status']=='failed'
+            with SessionLocal() as session:
+                assert len(selected_clips(session,json.dumps([vid])))==1
+            assert not compute_lock.locked()
+    finally:
+        with SessionLocal() as session:
+            session.query(BackgroundAnalysis).filter_by(video_id=vid).delete()
+            session.query(Clip).filter_by(source_video_id=vid).delete()
+            session.query(BackgroundVideo).filter_by(id=vid).delete();session.commit()

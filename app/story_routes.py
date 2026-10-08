@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
 from .db import SessionLocal
-from .models import Story, StoryGeneration
+from .models import Story, StoryGeneration, BackgroundAnalysis
 from . import story_engine
 
 router = APIRouter()
@@ -34,6 +34,7 @@ async def lifespan(app):
     recover_renders()
     # start.sh runs one worker. A restart interrupts in-process jobs, not saved stories.
     with SessionLocal() as session:
+        session.query(BackgroundAnalysis).filter_by(status='running').update({'status':'failed','message':'El análisis se interrumpió. Tocá ACTUALIZAR TOMAS para retomarlo.'})
         session.query(StoryGeneration).filter(StoryGeneration.status == 'running').update({
             'status': 'failed', 'message': 'El servidor se reinició durante la generación. Volvé a intentarlo.'})
         session.commit()

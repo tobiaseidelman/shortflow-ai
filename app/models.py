@@ -85,3 +85,11 @@ class RenderPlan(Base):
     job_id: Mapped[str] = mapped_column(ForeignKey('render_jobs.id'), primary_key=True)
     payload: Mapped[str] = mapped_column(Text)
     active_short_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class BackgroundAnalysis(Base):
+    __tablename__ = 'background_analysis'
+    video_id: Mapped[int] = mapped_column(ForeignKey('background_videos.id'), primary_key=True)
+    clip_ids: Mapped[str] = mapped_column(Text, default='[]')
+    status: Mapped[str] = mapped_column(String(20), default='running')
+    message: Mapped[str] = mapped_column(Text, default='Analizando tomas…')

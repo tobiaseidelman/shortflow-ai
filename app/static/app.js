@@ -135,7 +135,7 @@ async function loadVideos() {
   if(!videos.length){const p=document.createElement('p');p.textContent='No hay fondos todavía.';container.append(p);return;}
   const table=document.createElement('table');table.className='table';
   const header=table.insertRow();['Nombre','Duración','Resolución','Estado','Clips','Bordes'].forEach(label=>{const cell=document.createElement('th');cell.textContent=label;header.append(cell);});
-  videos.forEach(video=>{const row=table.insertRow();[video.name,video.duration.toFixed(1)+'s',video.width+'×'+video.height,video.status,video.clips].forEach(value=>row.insertCell().textContent=String(value));const b=document.createElement('button');b.textContent='QUITAR FRANJAS';b.onclick=()=>openFraming(video);row.insertCell().append(b);});
+  videos.forEach(video=>{const row=table.insertRow();[video.name,video.duration.toFixed(1)+'s',video.width+'×'+video.height,video.status,video.clips].forEach(value=>row.insertCell().textContent=String(value));const b=document.createElement('button');b.textContent='QUITAR FRANJAS';b.onclick=()=>openFraming(video);const cell=row.insertCell();cell.append(b);const a=document.createElement("button");a.textContent="ACTUALIZAR TOMAS";a.onclick=()=>reanalyzeBackground(video.id,a);cell.append(a);});
   container.append(table);
   } catch(error){$('#videos').textContent=error.message;}
 }
@@ -345,4 +345,18 @@ function renderResumeButton(job) {
   const button=document.createElement('button');button.id='resumeRenderJob';button.textContent='RETOMAR TRABAJO';
   button.onclick=async()=>{if(activeRender)return;button.disabled=true;try{await storyRequest('/api/render-jobs/'+encodeURIComponent(job.id)+'/resume',{method:'POST'});await watchRender(job.id);}catch(error){renderMessage(error.message,'err');button.disabled=false;}};
   $('#makeMsg').append(button);
+}
+
+async function reanalyzeBackground(id,button){
+ button.disabled=true;
+ try{
+  await storyRequest('/api/videos/'+id+'/reanalyze',{method:'POST'});
+  while(true){
+   const job=await storyRequest('/api/videos/'+id+'/analysis');
+   button.textContent=job.message;
+   if(job.status!=='running')break;
+   await new Promise(resolve=>setTimeout(resolve,2500));
+  }
+ }catch(error){button.textContent=error.message;}
+ finally{button.disabled=false;}
 }

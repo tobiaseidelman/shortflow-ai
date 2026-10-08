@@ -10,8 +10,8 @@ with TemporaryDirectory(prefix='shortflow-media-') as directory:
     folder=Path(directory)
     audio, captions, duration=narrate('Mi hermana me dijo que nadie iba a notar mi ausencia. Dejé las llaves sobre la mesa.',folder/'voice',folder,print)
     source=folder/'source.mp4'
-    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=320x240:rate=15','-t','2','-c:v','libx264',str(source)],check=True)
-    clip=SimpleNamespace(duration=2,start_time=0,source_video_id=1)
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=320x240:rate=15','-t',str(duration+.1),'-c:v','libx264',str(source)],check=True)
+    clip=SimpleNamespace(duration=duration+.1,start_time=0,source_video_id=1)
     render([clip],{1:str(source)},folder/'background.mp4',duration)
     overlay(folder/'background.mp4',audio,captions,folder/'final.mp4',duration)
     actual=metadata(folder/'final.mp4')

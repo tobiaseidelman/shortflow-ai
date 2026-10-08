@@ -25,25 +25,16 @@ def analyze(path):
  m=metadata(path); samples=_sample(path); dur=m['duration'];
  if dur<1 or len(samples)<2: return []
  changes=np.array([x[2] for x in samples]); threshold=max(12,float(np.percentile(changes,82)))
- cuts=[0.0]+[samples[i][0] for i in range(1,len(samples)) if changes[i]>threshold]+[dur]
- # build 4-8s candidates around real visual changes, then fill long spans adaptively
- anchors=sorted(set(round(x,2) for x in cuts)); candidates=[]
- for a in anchors[:-1]:
-  for L in (4.5,6.0,7.5):
-   b=min(dur,a+L)
-   if b-a>=4: candidates.append((a,b))
- # adaptive coverage for videos with few scene cuts
- t=0
- while t+4<=dur:
-  local=[x for x in samples if t<=x[0]<=min(dur,t+8)]
-  if local:
-   peak=max(local,key=lambda x:x[1]+x[2]/10)[0]; start=max(0,min(peak-.6,dur-4)); end=min(dur,start+6)
-   if end-start>=4:candidates.append((start,end))
-  t+=5.5
- # de-dupe near timestamps
- uniq=[]
- for a,b in sorted(candidates):
-  if not uniq or abs(a-uniq[-1][0])>.8: uniq.append((a,b))
+ # Keep complete detected shots; never manufacture overlapping 4-8 second windows.
+ # A large, isolated visual jump is safer than a percentile alone (which cuts motion).
+ boundaries=[0.0]
+ for i in range(2,len(samples)-2):
+  neighbors=[changes[j] for j in (i-2,i-1,i+1,i+2)]
+  if changes[i] > max(30, float(np.median(neighbors))*3) and samples[i][0]-boundaries[-1]>=2:
+   boundaries.append(samples[i][0])
+ if dur-boundaries[-1]<1: boundaries.pop()
+ boundaries.append(dur)
+ uniq=list(zip(boundaries,boundaries[1:]))
  def norm(v,scale): return max(0,min(100,v/scale*100))
  result=[]
  for a,b in uniq:
@@ -85,35 +76,36 @@ def optimize(clips, required, generation_no=0, weights=None):
      counts={sid:sum(c.source_video_id==sid for c in seq) for sid in allowed_sources}
      least=min(counts.values())
      allowed_sources={sid for sid in allowed_sources if counts[sid]==least}
-   pool=[c for c in clips if c.source_video_id in allowed_sources]
-   candidates=[c for c in pool if c not in recent] or [c for c in pool if not recent or c != recent[-1]] or pool
-   # Prefer unused time ranges, including overlapping alternatives from the same source.
    def overlaps(a,b):
     if a.source_video_id != b.source_video_id: return False
-    start_a=getattr(a,'start_time',0);start_b=getattr(b,'start_time',0)
-    return max(0,min(start_a+a.duration,start_b+b.duration)-max(start_a,start_b)) > min(a.duration,b.duration)*.5
-   fresh=[c for c in candidates if not any(overlaps(c,old) for old in seq)]
-   if fresh: candidates=fresh
-   least_used=min(c.times_used for c in candidates)
-   candidates=[c for c in candidates if c.times_used==least_used]
+    start_a=getattr(a,'start_time',0); start_b=getattr(b,'start_time',0)
+    return min(start_a+a.duration,start_b+b.duration)-max(start_a,start_b) > .001
+   unused=[c for c in clips if not any(overlaps(c,old) for old in seq)]
+   candidates=[c for c in unused if c.source_video_id in allowed_sources] or unused
    if total >= required:
     nxt.append((seq,score,total)); continue
+   if not candidates: continue
+   least_used=min(c.times_used for c in candidates)
+   candidates=[c for c in candidates if c.times_used==least_used]
    for c in candidates:
     novelty=max(0,100-c.times_used*12); position=c.hook_score if pos==0 else (c.motion_score if pos%3 else c.visual_change_score)
     penalty=(35 if c.similarity_group in groups else 0)+(18 if c.source_video_id in sources else 0)+(50 if c.cooldown_until>generation_no else 0)
     s=weights['hook']*(c.hook_score if pos==0 else c.hook_score*.35)+weights['motion']*c.motion_score+weights['change']*c.visual_change_score+weights['quality']*c.quality_score+weights['novelty']*novelty+weights['position']*position-penalty
     nxt.append((seq+[c],score+s,total+c.duration))
+  if not nxt: break
   beam=sorted(nxt,key=lambda x:x[1],reverse=True)[:40]
- best=max(beam,key=lambda x:x[1]+min(x[2],required)*2); return best[0]
+ complete=[item for item in beam if item[2]>=required]
+ if not complete: raise ValueError('No alcanza el fondo sin repetir fragmentos. Elegí más fondos o una historia más corta.')
+ return max(complete,key=lambda x:x[1])[0]
 
 def render(sequence, video_paths, output, duration, subtitles=None, crops=None):
  from tempfile import TemporaryDirectory
- from itertools import cycle
  if not sequence or duration <= 0 or duration > 600: raise ValueError('Secuencia o duración inválida')
+ if sum(c.duration for c in sequence)+.001 < duration: raise ValueError('El fondo no alcanza para completar el video sin repetir.')
  output=Path(output).resolve()
  with TemporaryDirectory(prefix='render-',dir=output.parent) as folder:
   tmp=Path(folder); pieces=[]; remaining=duration
-  for i,c in enumerate(cycle(sequence)):
+  for i,c in enumerate(sequence):
    if c.duration <= 0: raise ValueError('Clip vacío')
    take=min(c.duration,remaining); p=tmp/f'p{i}.mp4'
    percent=(crops or {}).get(c.source_video_id, 0)

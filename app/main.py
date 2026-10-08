@@ -65,7 +65,8 @@ def videos():
     with db() as s:
         rows = s.query(BackgroundVideo).order_by(BackgroundVideo.id.desc()).all()
         crops = crop_settings(s)
-        out = [{'side_percent': crops.get(v.id, 0), 'id': v.id, 'name': v.name, 'duration': v.duration, 'width': v.width, 'height': v.height, 'size': v.size, 'status': v.status, 'clips': s.query(Clip).filter_by(source_video_id=v.id).count()} for v in rows]
+        versions = {r.video_id: json.loads(r.clip_ids) for r in s.query(BackgroundAnalysis).all() if r.clip_ids != '[]'}
+        out = [{'side_percent': crops.get(v.id, 0), 'id': v.id, 'name': v.name, 'duration': v.duration, 'width': v.width, 'height': v.height, 'size': v.size, 'status': v.status, 'clips': len(versions[v.id]) if v.id in versions else s.query(Clip).filter_by(source_video_id=v.id).count()} for v in rows]
         return out
 
 @app.post('/api/videos/upload')
@@ -127,7 +128,10 @@ def create_short(story_id: int=Form(0), duration: float=Form(45, ge=1, le=300), 
         if not clips:
             raise HTTPException(400, 'Primero agregá y analizá al menos un video de fondo.')
         gen = s.query(Short).count()
-        seq = optimize(clips, duration, gen)
+        try:
+            seq = optimize(clips, duration, gen)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
         sh = Short(story_id=story_id or None, duration=duration, status='rendering', sequence_json=json.dumps([c.id for c in seq]))
         s.add(sh)
         s.commit()
@@ -180,6 +184,9 @@ def regen(sid: int, background_ids: str=Form('')):
                 out = OUT / f'short_{sid:04d}_regen.mp4'
                 result.replace(out)
             remember_selection(s, sid, clips)
+            for position, clip in enumerate(seq):
+                clip.times_used += 1
+                s.add(UsedClip(clip_id=clip.id, short_id=sid, position=position))
             sh.output_path = str(out)
             sh.sequence_json = json.dumps([c.id for c in seq])
             s.commit()

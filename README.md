@@ -170,7 +170,7 @@ La subida de fondos envía bloques de 4 MB y muestra el porcentaje recibido, has
 
 ### Estilo de los nuevos videos
 
-Se usa una sola voz masculina (Davefx, español de España) a velocidad normal para ambas partes, independientemente del género del protagonista. Los fondos conservan la imagen completa y su proporción: el espacio sobrante se rellena con una copia desenfocada. No se amplía ni recorta la imagen principal para llenar el formato vertical.
+Se usa una sola voz masculina (Davefx, español de España) con velocidad ligeramente acelerada para ambas partes, independientemente del género del protagonista. Los fondos conservan la imagen completa y su proporción: el espacio sobrante se rellena con una copia desenfocada. No se amplía ni recorta la imagen principal para llenar el formato vertical.
 
 Las instrucciones del generador priorizan narración indirecta; cuando hay una cita, deben identificar al personaje antes de hablar. La parte 1 corta después de una acción concreta y la parte 2 comienza con su reacción inmediata. Son instrucciones al modelo, no una garantía de calidad: revisá el borrador antes de guardarlo.
 
@@ -199,3 +199,9 @@ La selección visual prioriza clips menos utilizados y evita volver a elegir int
 Si el tema queda vacío, la aplicación propone una situación concreta distinta de las últimas cinco sugerencias. Los temas escritos por el usuario siempre tienen prioridad. La evaluación real de relatos de familia, trabajo y convivencia se ejecuta con el marcador `[story-eval]` en el commit; su salida sirve para revisión editorial humana, no certifica calidad automáticamente.
 
 La voz agrega una pausa breve de 160 ms entre párrafos; el reloj de subtítulos incluye esa pausa. Tras una corrección de extensión, se conservan relatos completos de 40–1200 palabras por parte aunque se aparten del objetivo de duración, con una advertencia visible. Las frases truncadas y las respuestas vacías siguen rechazándose.
+
+### Fondos sin fragmentos repetidos
+
+La voz masculina se genera aproximadamente un 8 % más rápida. Los nuevos análisis conservan tomas entre cambios visuales fuertes, sin fabricar ventanas superpuestas de 4–8 segundos. La detección visual es aproximada: no comprende cuándo termina cada acción, y el último tramo se corta cuando termina la narración.
+
+Para los fondos ya guardados, en **Fondos** pulsá **ACTUALIZAR TOMAS** una vez por video y esperá a que termine. No hace falta volver a subirlos; los recortes laterales y los videos anteriores se conservan. Al crear un short no se reutilizan intervalos del mismo archivo dentro de ese short. Si no alcanza el material, se pide agregar fondos o acortar la historia. Entre shorts distintos se priorizan tomas menos usadas; esto no detecta imágenes duplicadas dentro del propio archivo ni entre archivos diferentes.

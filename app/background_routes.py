@@ -2,15 +2,17 @@
 import json
 from pathlib import Path
 import cv2
-from fastapi import APIRouter, Form, HTTPException, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Query, Response
 from .db import SessionLocal
-from .models import BackgroundVideo, BackgroundFraming, Clip, ShortBackgrounds
+from .models import BackgroundVideo, BackgroundFraming, Clip, ShortBackgrounds, BackgroundAnalysis
 
 router = APIRouter()
 
 
 def selected_clips(session, raw=''):
     available = session.query(Clip).join(BackgroundVideo).filter(BackgroundVideo.status == 'ready').all()
+    versions={r.video_id: set(json.loads(r.clip_ids)) for r in session.query(BackgroundAnalysis).all() if r.clip_ids != '[]'}
+    available=[c for c in available if c.source_video_id not in versions or c.id in versions[c.source_video_id]]
     if not raw:
         if not available:
             raise HTTPException(400, 'Primero agregá y analizá un fondo.')
@@ -77,3 +79,52 @@ def preview(video_id: int, side_percent: float = Query(0, ge=0, le=40), second: 
     if not ok:
         raise HTTPException(422, 'No se pudo crear la vista previa.')
     return Response(data.tobytes(), media_type='image/jpeg', headers={'Cache-Control': 'no-store'})
+
+
+def reanalyze_video(video_id):
+    from .video_engine import analyze
+    from .work_lock import compute_lock
+    try:
+        with SessionLocal() as session:
+            video=session.get(BackgroundVideo,video_id)
+            rows=analyze(video.path)
+            if not rows: raise ValueError('No se encontraron tomas utilizables.')
+            clips=[Clip(source_video_id=video_id,**row) for row in rows]
+            session.add_all(clips);session.flush()
+            analysis=session.get(BackgroundAnalysis,video_id)
+            analysis.clip_ids=json.dumps([c.id for c in clips])
+            analysis.status='ready';analysis.message='Tomas actualizadas. Se usarán en los próximos videos.'
+            session.commit()
+    except Exception:
+        with SessionLocal() as session:
+            row=session.get(BackgroundAnalysis,video_id)
+            row.status='failed';row.message='No se pudo actualizar el análisis. El fondo anterior se conserva.'
+            session.commit()
+    finally:
+        compute_lock.release()
+
+
+@router.post('/api/videos/{video_id}/reanalyze',status_code=202)
+def start_reanalysis(video_id: int,tasks: BackgroundTasks):
+    from .work_lock import compute_lock
+    if not compute_lock.acquire(blocking=False):
+        raise HTTPException(409,'Hay otro trabajo en curso. Esperá a que termine.')
+    try:
+        with SessionLocal() as session:
+            video=session.get(BackgroundVideo,video_id)
+            if not video or video.status!='ready': raise HTTPException(404,'Fondo listo no encontrado.')
+            row=session.get(BackgroundAnalysis,video_id)
+            if row is None: row=BackgroundAnalysis(video_id=video_id);session.add(row)
+            row.status='running';row.message='Analizando tomas…';session.commit()
+        tasks.add_task(reanalyze_video,video_id)
+        return {'status':'running'}
+    except Exception:
+        compute_lock.release();raise
+
+
+@router.get('/api/videos/{video_id}/analysis')
+def analysis_status(video_id: int):
+    with SessionLocal() as session:
+        row=session.get(BackgroundAnalysis,video_id)
+        if not row: raise HTTPException(404,'Análisis no encontrado.')
+        return {'status':row.status,'message':row.message}
