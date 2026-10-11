@@ -25,6 +25,13 @@ with tempfile.TemporaryDirectory() as temp:
   elif path=='/api/story-generations/pair':payload=pair
   elif path.startswith('/api/stories/') and request.method=='PUT':state['saved']+=1;payload={'status':'saved'}
   elif path=='/api/videos':payload=[{'id':1,'name':'<script>alert(1)</script>','duration':600,'width':1280,'height':720,'status':'ready','clips':208},{'id':2,'name':'Segundo fondo','duration':600,'width':1280,'height':720,'status':'ready','clips':208}]
+  elif path=='/api/videos/1/source':return route.fulfill(status=200,content_type='video/mp4',body=preview.read_bytes())
+  elif path=='/api/videos/1/segments':
+   if request.method=='PUT':
+    data=request.post_data_json;assert data['revision']==manual['revision']
+    manual.update(manual=True,revision=str(int(manual['revision'] or '0')+1),segments=[dict(x,id=41+i) for i,x in enumerate(data['segments'])])
+   elif request.method=='DELETE':manual.update(manual=False,revision='',segments=[])
+   payload=manual
   elif path.endswith('/framing') and request.method=='PUT':payload={'side_percent':22.5}
   elif path.endswith('/preview'):return route.fulfill(status=200,content_type='image/jpeg',body=b'')
   elif path=='/api/uploads' and request.method=='POST':
@@ -61,6 +68,7 @@ with tempfile.TemporaryDirectory() as temp:
   expect(page.locator('#videos')).to_contain_text('<script>alert(1)</script>')
   assert page.locator('#videos script').count()==0
   page.get_by_role('button',name='ELEGIR FRAGMENTOS',exact=True).first.click()
+  expect(page.locator('#segmentsMsg')).to_contain_text('Agregá los fragmentos')
   page.locator('#segmentStart').fill('2');page.locator('#segmentEnd').fill('4')
   page.get_by_role('button',name='AGREGAR FRAGMENTO',exact=True).click()
   page.locator('#segmentStart').fill('3');page.locator('#segmentEnd').fill('5')
