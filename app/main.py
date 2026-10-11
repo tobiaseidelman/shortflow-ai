@@ -66,7 +66,8 @@ def videos():
         rows = s.query(BackgroundVideo).order_by(BackgroundVideo.id.desc()).all()
         crops = crop_settings(s)
         versions = {r.video_id: json.loads(r.clip_ids) for r in s.query(BackgroundAnalysis).all() if r.clip_ids != '[]'}
-        out = [{'side_percent': crops.get(v.id, 0), 'id': v.id, 'name': v.name, 'duration': v.duration, 'width': v.width, 'height': v.height, 'size': v.size, 'status': v.status, 'clips': len(versions[v.id]) if v.id in versions else s.query(Clip).filter_by(source_video_id=v.id).count()} for v in rows]
+        versions.update({r.video_id:json.loads(r.clip_ids) for r in s.query(ManualBackgroundSegments).all()})
+        out = [{'side_percent': crops.get(v.id, 0), 'id': v.id, 'name': v.name, 'duration': v.duration, 'width': v.width, 'height': v.height, 'size': v.size, 'status': v.status, 'clips': len(versions[v.id]) if v.id in versions else s.query(Clip).filter_by(source_video_id=v.id).filter(Clip.similarity_group != 'manual').count()} for v in rows]
         return out
 
 @app.post('/api/videos/upload')
@@ -112,6 +113,9 @@ def upload(file: UploadFile=File(...)):
             raise HTTPException(500, f'Falló el análisis: {str(e)[:180]}')
         return res
 
+from .segment_routes import router as segment_router
+app.include_router(segment_router)
+
 @app.get('/api/stories')
 def stories():
     with db() as s:
@@ -120,13 +124,17 @@ def stories():
         return o
 
 @app.post('/api/shorts')
-def create_short(story_id: int=Form(0), duration: float=Form(45, ge=1, le=300), background_ids: str=Form('')):
+def create_short(story_id: int=Form(0), duration: float=Form(45, ge=1, le=300), background_ids: str=Form(''), clip_id: int=Form(0, ge=0)):
     with db() as s:
         if story_id:
             raise HTTPException(400, 'Usá la generación con voz para una historia.')
         clips = selected_clips(s, background_ids)
         if not clips:
             raise HTTPException(400, 'Primero agregá y analizá al menos un video de fondo.')
+        if clip_id:
+            clips = [c for c in clips if c.id == clip_id and c.similarity_group == 'manual']
+            if not clips: raise HTTPException(400, 'El fragmento ya no está seleccionado. Volvé a abrir el editor.')
+            duration = clips[0].duration
         gen = s.query(Short).count()
         try:
             seq = optimize(clips, duration, gen)

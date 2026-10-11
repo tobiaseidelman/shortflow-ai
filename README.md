@@ -205,3 +205,11 @@ La voz agrega una pausa breve de 160 ms entre párrafos; el reloj de subtítulos
 La voz masculina se genera aproximadamente un 8 % más rápida. Los nuevos análisis conservan tomas entre cambios visuales fuertes, sin fabricar ventanas superpuestas de 4–8 segundos. La detección visual es aproximada: no comprende cuándo termina cada acción, y el último tramo se corta cuando termina la narración.
 
 Para los fondos ya guardados, en **Fondos** pulsá **ACTUALIZAR TOMAS** una vez por video y esperá a que termine. No hace falta volver a subirlos; los recortes laterales y los videos anteriores se conservan. Al crear un short no se reutilizan intervalos del mismo archivo dentro de ese short. Si no alcanza el material, se pide agregar fondos o acortar la historia. Entre shorts distintos se priorizan tomas menos usadas; esto no detecta imágenes duplicadas dentro del propio archivo ni entre archivos diferentes.
+
+### Elegir fragmentos manualmente
+
+En **Fondos → ELEGIR FRAGMENTOS**, reproducí el archivo y usá **MARCAR INICIO AQUÍ** y **MARCAR FINAL AQUÍ**, o escribí los segundos. **REPRODUCIR SELECCIÓN** se detiene en el final elegido. Agregá uno o varios tramos, revisalos y tocá **GUARDAR FRAGMENTOS**. Cada tramo admite de 0,25 a 300 segundos; los tramos no pueden superponerse.
+
+Los próximos shorts usarán únicamente esos fragmentos de ese fondo, combinados con los otros fondos seleccionados. **CREAR SHORT CON ESTE FRAGMENTO** exporta exactamente ese tramo completo como video vertical, con el recorte lateral guardado y sin narración. Si creás un short con duración fija o historia, el último fragmento puede acortarse para ajustarse a esa duración.
+
+**USAR TOMAS AUTOMÁTICAS** restaura la selección automática. Los originales y los clips referenciados por shorts anteriores se conservan. Reanalizar las tomas no reemplaza tu selección manual. El reproductor requiere un formato compatible con el navegador (preferentemente MP4/H.264). Si hay cambios desde otra pestaña, el guardado pide volver a abrir el editor para evitar sobrescribirlos.

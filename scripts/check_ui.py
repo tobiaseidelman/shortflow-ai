@@ -1,4 +1,4 @@
-import os,tempfile,json
+import os,tempfile,json,subprocess
 from pathlib import Path
 from urllib.parse import urlsplit, parse_qs
 from playwright.sync_api import sync_playwright, expect
@@ -10,6 +10,9 @@ with tempfile.TemporaryDirectory() as temp:
  from app.main import app
  with TestClient(app) as client: html=client.get('/').text
  pair={'id':'pair','title':'Prueba de dos partes','duration':90,'status':'ready','message':'Lista','parts':[{'number':1,'id':11,'title':'Parte 1','text':'Yo conté lo que pasó.','words':5,'duration':90},{'number':2,'id':12,'title':'Parte 2','text':'Yo decidí cómo resolverlo.','words':4,'duration':90}]}
+ preview=Path(temp)/'preview.mp4'
+ subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=320x180:rate=10','-t','6','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',str(preview)],check=True)
+ manual={'video_id':1,'duration':600,'revision':'','manual':False,'source':'/api/videos/1/source','segments':[]}
  state={'render_parts':2,'saved':0,'imports':0,'errors':[],'chunk_sizes':[],'upload':None}
  def handle(route):
   request=route.request;path=urlsplit(request.url).path
@@ -50,13 +53,36 @@ with tempfile.TemporaryDirectory() as temp:
   else:return route.fulfill(status=204,body='')
   return route.fulfill(status=200,content_type='application/json',body=json.dumps(payload))
  with sync_playwright() as p:
-  browser=p.chromium.launch(headless=True)
+  browser=p.chromium.launch(headless=True, **({'executable_path':os.environ['SHORTFLOW_BROWSER']} if os.environ.get('SHORTFLOW_BROWSER') else {}))
   page=browser.new_page(viewport={'width':1440,'height':1100})
   page.on('pageerror',lambda err:state['errors'].append(str(err)))
   page.route('**/*',handle);page.goto('http://shortflow.test/')
   page.get_by_role('button',name='Fondos',exact=True).click()
   expect(page.locator('#videos')).to_contain_text('<script>alert(1)</script>')
   assert page.locator('#videos script').count()==0
+  page.get_by_role('button',name='ELEGIR FRAGMENTOS',exact=True).first.click()
+  page.locator('#segmentStart').fill('2');page.locator('#segmentEnd').fill('4')
+  page.get_by_role('button',name='AGREGAR FRAGMENTO',exact=True).click()
+  page.locator('#segmentStart').fill('3');page.locator('#segmentEnd').fill('5')
+  page.get_by_role('button',name='AGREGAR FRAGMENTO',exact=True).click()
+  expect(page.locator('#segmentsMsg')).to_contain_text('superpone')
+  page.get_by_role('button',name='GUARDAR FRAGMENTOS',exact=True).click()
+  expect(page.locator('#segmentsMsg')).to_contain_text('Fragmentos guardados')
+  page.locator('#segmentList').get_by_role('button',name='EDITAR',exact=True).click()
+  page.locator('#segmentStart').fill('2.5')
+  page.get_by_role('button',name='ACTUALIZAR FRAGMENTO',exact=True).click()
+  page.get_by_role('button',name='GUARDAR FRAGMENTOS',exact=True).click()
+  expect(page.locator('#segmentsMsg')).to_contain_text('Fragmentos guardados')
+  page.get_by_role('button',name='REPRODUCIR SELECCIÓN',exact=True).click()
+  page.wait_for_function("document.querySelector('#segmentPlayer').paused && document.querySelector('#segmentPlayer').currentTime >= 3.99",timeout=10000)
+  assert page.locator('#segmentPlayer').evaluate('(v)=>v.currentTime')<=4.05
+  page.get_by_role('button',name='CREAR SHORT CON ESTE FRAGMENTO',exact=True).click()
+  expect(page.locator('#makeMsg')).to_contain_text('Fragmento completo listo')
+  page.get_by_role('button',name='Fondos',exact=True).click()
+  page.get_by_role('button',name='ELEGIR FRAGMENTOS',exact=True).first.click()
+  expect(page.locator('#segmentList')).to_contain_text('2.500 s → 4.000 s')
+  page.get_by_role('button',name='USAR TOMAS AUTOMÁTICAS',exact=True).click()
+  expect(page.locator('#segmentList')).to_contain_text('Todavía no agregaste')
   page.get_by_role('button',name='QUITAR FRANJAS',exact=True).first.click()
   page.locator('#sideCrop').fill('22.5')
   expect(page.locator('#cropAmount')).to_have_text('22.5% de cada lado')

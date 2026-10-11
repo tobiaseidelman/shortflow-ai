@@ -93,3 +93,9 @@ class BackgroundAnalysis(Base):
     clip_ids: Mapped[str] = mapped_column(Text, default='[]')
     status: Mapped[str] = mapped_column(String(20), default='running')
     message: Mapped[str] = mapped_column(Text, default='Analizando tomas…')
+
+class ManualBackgroundSegments(Base):
+    __tablename__ = 'manual_background_segments'
+    video_id: Mapped[int] = mapped_column(ForeignKey('background_videos.id'), primary_key=True)
+    clip_ids: Mapped[str] = mapped_column(Text, default='[]')
+    revision: Mapped[str] = mapped_column(String(36))

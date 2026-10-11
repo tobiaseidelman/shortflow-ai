@@ -4,7 +4,7 @@ from pathlib import Path
 import cv2
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Query, Response
 from .db import SessionLocal
-from .models import BackgroundVideo, BackgroundFraming, Clip, ShortBackgrounds, BackgroundAnalysis
+from .models import BackgroundVideo, BackgroundFraming, Clip, ShortBackgrounds, BackgroundAnalysis, ManualBackgroundSegments
 
 router = APIRouter()
 
@@ -12,7 +12,8 @@ router = APIRouter()
 def selected_clips(session, raw=''):
     available = session.query(Clip).join(BackgroundVideo).filter(BackgroundVideo.status == 'ready').all()
     versions={r.video_id: set(json.loads(r.clip_ids)) for r in session.query(BackgroundAnalysis).all() if r.clip_ids != '[]'}
-    available=[c for c in available if c.source_video_id not in versions or c.id in versions[c.source_video_id]]
+    versions.update({r.video_id:set(json.loads(r.clip_ids)) for r in session.query(ManualBackgroundSegments).all()})
+    available=[c for c in available if (c.id in versions[c.source_video_id] if c.source_video_id in versions else c.similarity_group != 'manual')]
     if not raw:
         if not available:
             raise HTTPException(400, 'Primero agregá y analizá un fondo.')
