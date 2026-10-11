@@ -10,8 +10,8 @@ with tempfile.TemporaryDirectory() as temp:
  from app.main import app
  with TestClient(app) as client: html=client.get('/').text
  pair={'id':'pair','title':'Prueba de dos partes','duration':90,'status':'ready','message':'Lista','parts':[{'number':1,'id':11,'title':'Parte 1','text':'Yo conté lo que pasó.','words':5,'duration':90},{'number':2,'id':12,'title':'Parte 2','text':'Yo decidí cómo resolverlo.','words':4,'duration':90}]}
- preview=Path(temp)/'preview.mp4'
- subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=320x180:rate=10','-t','6','-c:v','libx264','-pix_fmt','yuv420p','-movflags','+faststart',str(preview)],check=True)
+ preview=Path(temp)/'preview.webm'
+ subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','testsrc2=size=320x180:rate=10','-t','6','-c:v','libvpx-vp9','-deadline','realtime','-crf','40','-b:v','0',str(preview)],check=True)
  manual={'video_id':1,'duration':600,'revision':'','manual':False,'source':'/api/videos/1/source','segments':[]}
  state={'render_parts':2,'saved':0,'imports':0,'errors':[],'chunk_sizes':[],'upload':None}
  def handle(route):
@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory() as temp:
   elif path=='/api/story-generations/pair':payload=pair
   elif path.startswith('/api/stories/') and request.method=='PUT':state['saved']+=1;payload={'status':'saved'}
   elif path=='/api/videos':payload=[{'id':1,'name':'<script>alert(1)</script>','duration':600,'width':1280,'height':720,'status':'ready','clips':208},{'id':2,'name':'Segundo fondo','duration':600,'width':1280,'height':720,'status':'ready','clips':208}]
-  elif path=='/api/videos/1/source':return route.fulfill(status=200,content_type='video/mp4',body=preview.read_bytes())
+  elif path=='/api/videos/1/source':return route.fulfill(status=200,content_type='video/webm',body=preview.read_bytes())
   elif path=='/api/videos/1/segments':
    if request.method=='PUT':
     data=request.post_data_json;assert data['revision']==manual['revision']
@@ -82,7 +82,12 @@ with tempfile.TemporaryDirectory() as temp:
   page.get_by_role('button',name='GUARDAR FRAGMENTOS',exact=True).click()
   expect(page.locator('#segmentsMsg')).to_contain_text('Fragmentos guardados')
   page.get_by_role('button',name='REPRODUCIR SELECCIÓN',exact=True).click()
-  page.wait_for_function("document.querySelector('#segmentPlayer').paused && document.querySelector('#segmentPlayer').currentTime >= 3.99",timeout=10000)
+  try:
+   page.wait_for_function("document.querySelector('#segmentPlayer').paused && document.querySelector('#segmentPlayer').currentTime >= 3.99",timeout=10000)
+  except Exception:
+   print(page.locator('#segmentPlayer').evaluate("v=>({time:v.currentTime,paused:v.paused,ready:v.readyState,error:v.error?.message,playing:segmentPlaying,bounds:segmentBounds()})"),flush=True)
+   print(state['errors'],flush=True)
+   raise
   assert page.locator('#segmentPlayer').evaluate('(v)=>v.currentTime')<=4.05
   page.get_by_role('button',name='CREAR SHORT CON ESTE FRAGMENTO',exact=True).click()
   expect(page.locator('#makeMsg')).to_contain_text('Fragmento completo listo')
