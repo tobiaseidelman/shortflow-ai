@@ -6,6 +6,7 @@ function segmentValid({start,end}){return segmentState&&Number.isFinite(start)&&
 function segmentControls(){
  const valid=segmentValid(segmentBounds());
  $('#segmentDuration').textContent=valid?'Duración: '+(segmentBounds().end-segmentBounds().start).toFixed(3)+' segundos':'Elegí un intervalo de 0,25 a 300 segundos dentro del video.';
+ $('#playSegment').disabled=!valid||segmentPlayer.readyState<1;
  $('#addSegment').disabled=segmentBusy||!valid;$('#saveSegments').disabled=segmentBusy||!segmentDirty||!segmentState?.segments.length;
  $('#resetSegments').disabled=segmentBusy||!segmentState?.manual;
 }
@@ -30,12 +31,13 @@ async function openSegments(video){
 function markSegment(which){if(!segmentState)return;const bounds=segmentBounds();bounds[which]=Math.round(segmentPlayer.currentTime*1000)/1000;setSegmentBounds(bounds.start,bounds.end);}
 function newSegment(){if(!segmentState||segmentBusy)return;segmentEditing=-1;$('#addSegment').textContent='AGREGAR FRAGMENTO';const start=Math.min(segmentPlayer.currentTime,Math.max(0,segmentState.duration-.25));setSegmentBounds(start,Math.min(start+20,segmentState.duration));}
 async function playSegment(){
- if(!segmentValid(segmentBounds()))return;
+ if(!segmentValid(segmentBounds())||segmentPlayer.readyState<1)return;
  segmentPlayer.currentTime=segmentBounds().start;segmentPlaying=true;
  try{await segmentPlayer.play();}catch(error){segmentPlaying=false;$('#segmentPlaybackError').textContent='No se pudo reproducir este formato. Podés marcar los tiempos manualmente o usar un MP4 compatible con el navegador.';}
 }
 function checkSegmentEnd(){if(segmentPlaying&&segmentPlayer.currentTime>=segmentBounds().end){segmentPlayer.pause();segmentPlayer.currentTime=segmentBounds().end;segmentPlaying=false;}}
 function watchSegmentFrame(){checkSegmentEnd();if(!segmentPlayer.paused)requestAnimationFrame(watchSegmentFrame);}
+segmentPlayer.addEventListener('loadedmetadata',segmentControls);
 segmentPlayer.addEventListener('play',watchSegmentFrame);segmentPlayer.addEventListener('timeupdate',checkSegmentEnd);
 segmentPlayer.addEventListener('pause',()=>{segmentPlaying=false;});
 segmentPlayer.addEventListener('error',()=>{$('#segmentPlaybackError').textContent='El navegador no puede reproducir este archivo. Probá un MP4 con video H.264. Los tiempos se pueden editar igualmente.';});

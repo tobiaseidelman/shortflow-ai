@@ -25,7 +25,12 @@ with tempfile.TemporaryDirectory() as temp:
   elif path=='/api/story-generations/pair':payload=pair
   elif path.startswith('/api/stories/') and request.method=='PUT':state['saved']+=1;payload={'status':'saved'}
   elif path=='/api/videos':payload=[{'id':1,'name':'<script>alert(1)</script>','duration':600,'width':1280,'height':720,'status':'ready','clips':208},{'id':2,'name':'Segundo fondo','duration':600,'width':1280,'height':720,'status':'ready','clips':208}]
-  elif path=='/api/videos/1/source':return route.fulfill(status=200,content_type='video/webm',body=preview.read_bytes())
+  elif path=='/api/videos/1/source':
+   data=preview.read_bytes();range_header=request.headers.get('range')
+   if range_header:
+    start,end=range_header.removeprefix('bytes=').split('-');start=int(start);end=min(int(end) if end else len(data)-1,len(data)-1)
+    return route.fulfill(status=206,content_type='video/webm',headers={'Accept-Ranges':'bytes','Content-Range':f'bytes {start}-{end}/{len(data)}'},body=data[start:end+1])
+   return route.fulfill(status=200,content_type='video/webm',headers={'Accept-Ranges':'bytes'},body=data)
   elif path=='/api/videos/1/segments':
    if request.method=='PUT':
     data=request.post_data_json;assert data['revision']==manual['revision']
@@ -85,7 +90,7 @@ with tempfile.TemporaryDirectory() as temp:
   try:
    page.wait_for_function("document.querySelector('#segmentPlayer').paused && document.querySelector('#segmentPlayer').currentTime >= 3.99",timeout=10000)
   except Exception:
-   print(page.locator('#segmentPlayer').evaluate("v=>({time:v.currentTime,paused:v.paused,ready:v.readyState,error:v.error?.message,playing:segmentPlaying,bounds:segmentBounds()})"),flush=True)
+   print(page.locator('#segmentPlayer').evaluate("v=>({time:v.currentTime,paused:v.paused,ready:v.readyState,error:v.error?.message,playing:segmentPlaying,bounds:segmentBounds(),message:document.querySelector('#segmentPlaybackError').textContent})"),flush=True)
    print(state['errors'],flush=True)
    raise
   assert page.locator('#segmentPlayer').evaluate('(v)=>v.currentTime')<=4.05
