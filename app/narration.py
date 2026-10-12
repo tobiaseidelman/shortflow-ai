@@ -139,14 +139,42 @@ def overlay(background, audio, subtitles, output, duration):
 
 
 def intro_card(text, seconds):
-    """A readable post-style card, timed to its own spoken introduction."""
+    """Post-style opening with vector details, sized to the spoken text."""
     import textwrap
     safe = text.replace('\\', '').replace('{', '').replace('}', '')
     lines = textwrap.wrap(' '.join(safe.split()), width=28)
-    label = r'{\an7\pos(135,700)\fs30\c&H777777&}SHORTFLOW · RELATO'
-    body = r'{\an5\pos(540,990)}' + r'\N'.join(lines)
+    height = max(420, len(lines) * 64 + 250)
+    top = int(960 - height / 2)
+    bottom = top + height
     end = timestamp(seconds)
-    box = r'{\an7\pos(0,0)\p1\bord0\shad0\c&HFFFFFF&}m 85 650 l 995 650 995 1310 85 1310'
-    return [f'Dialogue: 0,0:00:00.00,{end},Card,,0,0,0,,{box}',
-            f'Dialogue: 1,0:00:00.00,{end},Card,,0,0,0,,{label}',
-            f'Dialogue: 1,0:00:00.00,{end},Card,,0,0,0,,{body}']
+    events = []
+
+    def shape(path, color, layer=0, extra=''):
+        tags = r'{\an7\pos(0,0)\p1\bord0\shad0\c&H' + color + '&' + extra + '}'
+        events.append(f'Dialogue: {layer},0:00:00.00,{end},Card,,0,0,0,,{tags}{path}')
+
+    def rounded(x, y, w, h, r):
+        return (f'm {x+r} {y} l {x+w-r} {y} '
+                f'b {x+w} {y} {x+w} {y} {x+w} {y+r} l {x+w} {y+h-r} '
+                f'b {x+w} {y+h} {x+w} {y+h} {x+w-r} {y+h} l {x+r} {y+h} '
+                f'b {x} {y+h} {x} {y+h} {x} {y+h-r} l {x} {y+r} '
+                f'b {x} {y} {x} {y} {x+r} {y}')
+
+    shape(rounded(85, top+14, 910, height, 32), '000000', extra=r'\alpha&H70&\blur12')
+    shape(rounded(85, top, 910, height, 32), 'FCFAFA')
+    # A conversation icon and short accent rule replace the brand label.
+    shape(rounded(130, top+35, 72, 72, 22), 'EFE4F3', 1)
+    shape(rounded(145, top+53, 42, 29, 9) + f' m 153 {top+78} l 153 {top+91} 168 {top+78}', '965EE5', 2)
+    shape(rounded(220, top+60, 100, 8, 4), '965EE5', 1)
+    shape(rounded(220, top+78, 62, 6, 3), 'DAD0DF', 1)
+    for x in (913, 931, 949):
+        shape(rounded(x, top+65, 7, 7, 3), 'A79BAE', 1)
+    body = (r'{\an5\pos(540,' + str(top+135+len(lines)*32) + r')\fs52\c&H262020&}'
+            + r'\N'.join(lines))
+    events.append(f'Dialogue: 2,0:00:00.00,{end},Card,,0,0,0,,{body}')
+    shape(f'm 130 {bottom-75} l 950 {bottom-75} 950 {bottom-73} 130 {bottom-73}', 'E9E3ED', 1)
+    # Quiet footer details: conversation and bookmark, without invented counters.
+    shape(rounded(135, bottom-53, 34, 24, 7) + f' m 140 {bottom-33} l 140 {bottom-24} 151 {bottom-33}', 'C9BBCE', 1)
+    shape(rounded(184, bottom-46, 75, 7, 3), 'E5DCE9', 1)
+    shape(f'm 923 {bottom-54} l 945 {bottom-54} 945 {bottom-25} 934 {bottom-33} 923 {bottom-25}', '965EE5', 1)
+    return events

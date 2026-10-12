@@ -60,5 +60,5 @@ def test_intro_card_is_spoken_once_and_story_starts_after_it(tmp_path, monkeypat
     contents=captions.read_text()
     assert '0:00:01.00,Card' in contents
     assert '0:00:01.24,' in contents
-    assert 'SHORTFLOW · RELATO' in contents
+    assert 'SHORTFLOW · RELATO' not in contents
     assert 'Default,,0,0,0,,Le presté' not in contents
