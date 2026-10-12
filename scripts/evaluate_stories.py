@@ -13,7 +13,7 @@ THEMES = {
  'convivencia': 'Mi compañero de apartamento cobraba a escondidas por prestar mi habitación cuando yo viajaba. Descubrí una reseña que mostraba mi escritorio. El alquiler está a nombre de ambos; quiero recuperar mi privacidad sin inventar que puedo echarlo de inmediato.',
 }
 if '--qwen3' in sys.argv:
- story_engine.MODEL='qwen3:4b'
+ story_engine.MODEL='qwen3:4b-instruct-2507-q4_K_M'
 print('EVALUATION_MODEL '+story_engine.MODEL,flush=True)
 original_complete=story_engine.complete
 def logged_complete(messages,json_mode=False):
