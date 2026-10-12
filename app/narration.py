@@ -128,9 +128,20 @@ def overlay(background, audio, subtitles, output, duration):
     from tempfile import TemporaryDirectory
     with TemporaryDirectory(prefix='captions-', dir=Path(output).parent) as tmp:
         shutil.copyfile(subtitles, Path(tmp) / 'captions.ass')
+        marker = re.search(r'^; IntroAvatar ([0-9.]+) ([0-9]+)$', Path(subtitles).read_text(), re.M)
+        video_args = ['-vf', 'ass=captions.ass', '-map', '0:v:0']
+        if marker:
+            avatar = Path(__file__).resolve().parent / 'assets' / 'channel-avatar.jpg'
+            until, y = float(marker[1]), int(marker[2])
+            graph = ("[0:v]ass=captions.ass[card];"
+                     "[2:v]crop=iw:iw:0:0,scale=72:72,format=rgba,"
+                     "geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':"
+                     "a='if(lte((X-35.5)*(X-35.5)+(Y-35.5)*(Y-35.5),35.5*35.5),255,0)'[avatar];"
+                     f"[card][avatar]overlay=130:{y}:enable='lt(t,{until})'[v]")
+            video_args = ['-i', str(avatar), '-filter_complex_threads', '1', '-filter_complex', graph, '-map', '[v]']
         subprocess.run(['ffmpeg', '-nostdin', '-y', '-v', 'error', '-i', str(Path(background).resolve()),
-                        '-i', str(Path(audio).resolve()), '-vf', 'ass=captions.ass',
-                        '-map', '0:v:0', '-map', '1:a:0', '-t', str(duration),
+                        '-i', str(Path(audio).resolve()), *video_args,
+                        '-map', '1:a:0', '-t', str(duration),
                         '-c:v', 'libx264', '-preset', 'veryfast', '-threads', '2',
                         '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k',
                         '-movflags', '+faststart', str(Path(tmp) / 'final.mp4')],
@@ -162,9 +173,8 @@ def intro_card(text, seconds):
 
     shape(rounded(85, top+14, 910, height, 32), '000000', extra=r'\alpha&H70&\blur12')
     shape(rounded(85, top, 910, height, 32), 'FCFAFA')
-    # One conversation icon accompanies the channel name.
-    shape(rounded(130, top+35, 72, 72, 22), 'EFE4F3', 1)
-    shape(rounded(145, top+53, 42, 29, 9) + f' m 153 {top+78} l 153 {top+91} 168 {top+78}', '965EE5', 2)
+    # The compositor inserts the channel photo only while this card is visible.
+    events.append(f'; IntroAvatar {seconds:.6f} {top+35}')
     channel = r'{\an4\pos(220,' + str(top+71) + r')\fs29\c&H655B69&}MOHAMED HISTORIAS'
     events.append(f'Dialogue: 2,0:00:00.00,{end},Card,,0,0,0,,{channel}')
     for x in (913, 931, 949):
