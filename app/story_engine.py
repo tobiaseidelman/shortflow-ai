@@ -17,8 +17,8 @@ URL = 'http://127.0.0.1:11434'
 LOAD_TIMEOUT = '10m'
 CHAT_TIMEOUT = 1200  # Allow model loading plus generation on a CPU Codespace.
 REVIEW_SCHEMA = {
-    'type': 'object', 'required': ['issues'], 'additionalProperties': False,
-    'properties': {'issues': {'type': 'array', 'maxItems': 4,
+    'type': 'object', 'required': ['ownership', 'money', 'continuation', 'resolution', 'issues'], 'additionalProperties': False,
+    'properties': {**{key: {'type': 'string', 'maxLength': 500} for key in ('ownership', 'money', 'continuation', 'resolution')}, 'issues': {'type': 'array', 'maxItems': 4,
                               'items': {'type': 'string', 'minLength': 1}}},
 }
 _server = None
@@ -29,6 +29,8 @@ SCHEMA = {
     'required': ['title', 'plan', 'part1', 'part2'],
     'additionalProperties': False,
 }
+PLAN_FIELDS = ('title', 'narrator', 'relationship', 'grievance', 'resource', 'clue', 'cliffhanger', 'outcome')
+PLAN_SCHEMA = {'type':'object', 'properties':{k:{'type':'string','minLength':1,'maxLength':400} for k in PLAN_FIELDS}, 'required':list(PLAN_FIELDS), 'additionalProperties':False}
 SYSTEM = """Escribís ficción realista en español natural, en primera persona, para dos videos conectados.
 El tema original del usuario es la fuente principal: conservá parentescos, motivos,
 profesiones, quién paga y a nombre de quién está cada obligación. El plan solo completa
@@ -51,6 +53,9 @@ no ocultes información que el narrador ya contó y no uses «en la parte 2», �
 Parte 2: empieza con la respuesta o consecuencia inmediata de esa MISMA acción, sin resumen,
 salto atrás ni otra introducción. Luego resuelve el conflicto, sin otro final pendiente.
 Cada párrafo debe aportar un hecho, una reacción o una decisión nueva. No repitas la misma acusación con otras palabras ni llenes espacio describiendo miradas, brazos cruzados o tensión.
+Si alguien vendió algo ajeno, diferenciá dueño, quien lo tiene y comprador; nombrá al sujeto
+cuando cambie quién actúa. Una seña tiene un pagador y un receptor: el desenlace explica
+qué pasa con ella. No confundas recuperar algo con entregárselo a quien lo quitó.
 No fuerces perdones ni venganzas espectaculares. Revisá concordancia y tiempos verbales.
 Entregá solamente la prosa del episodio solicitado."""
 
@@ -229,6 +234,8 @@ def validate_episode(text, duration, *, allow_length=False):
 
 
 def write_episode(messages, duration, progress):
+    # Freeze the original assignment and prior episode across length corrections.
+    context = [{'role':m['role'], 'content':m['content']} for m in messages if m['role'] != 'system']
     for attempt in range(2):
         text = complete(messages)
         try:
@@ -249,13 +256,15 @@ def write_episode(messages, duration, progress):
                 instruction = f'Ampliá el texto a unas {target} palabras desarrollando acciones y sus consecuencias mediante narración, sin repetir hechos.'
             else:
                 instruction = 'Corregí el punto de vista o la frase incompleta sin cambiar los hechos ni extender el texto.'
-            # A fresh editing request prevents the model from rewriting both
-            # episodes when only the second draft needs shortening.
+            # A fresh editing request labels previous prose as context, while keeping
+            # the immutable facts and the exact continuation point available.
             messages = [
                 {'role': 'system', 'content':
                  'Sos editor de una narración en español. Corregí únicamente el texto recibido. '
-                 'Conservá personajes, hechos, primera persona y última escena. '
+                 'Conservá personajes, hechos, primera persona y última escena. El contexto fija dueño, '
+                 'pagador, receptor, obligaciones y punto de continuación; no los cambies para ajustar palabras. '
                  'No agregues introducciones, episodios anteriores ni comentarios.'},
+                {'role': 'user', 'content': 'CONTEXTO DE REFERENCIA, NO REESCRIBIR: ' + json.dumps(context, ensure_ascii=False)},
                 {'role': 'assistant', 'content': text},
                 {'role': 'user', 'content': f'Corregí únicamente este borrador. {exc} {instruction} Devolvé solo este episodio corregido.'},
             ]
@@ -299,8 +308,8 @@ def request_review(messages, progress):
             # reinterpret a malformed answer as a successful check.
             messages = [*messages, {'role': 'user', 'content':
                 'La respuesta anterior no tenía el formato requerido. Volvé a revisar los textos. '
-                'Respondé SOLO {"issues": []} si no hay errores, o '
-                '{"issues": ["descripción concreta del error"]}. '
+                'Completá ownership, money, continuation y resolution con evidencia de los textos. '
+                'Usá issues: [] si no hay errores, o issues: ["descripción concreta del error"]. '
                 'Cada observación debe ser una frase no vacía.'}]
 
 
@@ -319,6 +328,12 @@ def review_and_repair(theme, draft, duration, progress):
              'imposible, personajes que saben algo sin enterarse, corte desconectado o desenlace '
              'ausente, parlamentos sin identificar quién habla ANTES, escenas repetidas sin avanzar o una promesa de revelación que sustituye la acción del corte. El tema tiene prioridad sobre cualquier invención. No pidas cambios '
              'por gusto ni inventes errores. Respondé JSON {"issues": []} si no hay errores. '
+             'Antes de decidir, completá ownership (dueño y quién conserva cada objeto al final), '
+             'money (quién pagó, quién cobró y qué pasa con la deuda o seña; no aplica si no hay dinero), '
+             'continuation (última acción de parte 1 y primera reacción de parte 2), '
+             'resolution (qué obtiene o pierde cada afectado, incluido un tercero perjudicado). '
+             'Describí lo que DICEN los textos, no lo que deberían decir. Un perdón o una colaboración '
+             'no resuelve por sí solo un objeto perdido, un cobro o un reclamo pendiente. '
              'Si los hay, issues contiene hasta cuatro frases que citan el hecho incorrecto '
              'y explican qué debe corregirse. No reescribas todavía.'},
             {'role': 'user', 'content': json.dumps(
@@ -336,7 +351,7 @@ def review_and_repair(theme, draft, duration, progress):
         original = {key: draft[key] for key in ('part1', 'part2')}
         repaired = dict(draft)
         for key in ('part1', 'part2'):
-            context = {'tema_original': theme, 'errores_a_corregir': issues,
+            context = {'tema_original': theme, 'plan_de_referencia': draft['plan'], 'errores_a_corregir': issues,
                        'borrador_parte1': original['part1'], 'borrador_parte2': original['part2']}
             if key == 'part2':
                 del context['borrador_parte1']
@@ -383,13 +398,15 @@ def generate_story(theme, duration, storage, progress):
             'title (título concreto), narrator (quién cuenta y qué quiere), relationship '
             '(quién se opone y qué quiere; parentescos exactos del tema), grievance (hecho inicial '
             'y qué está en juego), resource (hechos fijos: quién sabe qué, de quién es cada objeto '
-            'y quién tiene cada obligación), clue (detalle temprano y cómo se descubre su significado), '
+            'y quién tiene cada obligación; distinguí dueño de poseedor, pagador de receptor; '
+            'indicá origen y destino del dinero si existe), clue (detalle temprano y cómo se descubre su significado), '
             'cliffhanger (última acción de parte 1 y reacción INMEDIATA que abre parte 2), '
-            'outcome (decisión final y consecuencia concreta ya ocurrida, coherente con los hechos). '
-            'Ordená los hechos cronológicamente y no cambies su causa. Si alguien es excluido, '
-            'no lo hagas asistir sin explicación. Máximo 220 palabras en total.' }], json_mode=True)
+            'outcome (decisión final y consecuencia concreta ya ocurrida para CADA afectado; '
+            'si hay dinero, quién devuelve o conserva cuánto; si hay un objeto, quién lo conserva). '
+            'No inventes dinero para cerrar una deuda ni reconciliación instantánea. Ordená los hechos cronológicamente y no cambies su causa. Si alguien es excluido, '
+            'no lo hagas asistir sin explicación. Máximo 220 palabras en total.' }], json_mode=PLAN_SCHEMA)
         data = json.loads(outline)
-        fields = ('title', 'narrator', 'relationship', 'grievance', 'resource', 'clue', 'cliffhanger', 'outcome')
+        fields = PLAN_FIELDS
         if not isinstance(data, dict) or any(not isinstance(data.get(k), str) or not data[k].strip() for k in fields):
             raise ValueError('No se pudo preparar un plan completo.')
         title = data['title'].strip()

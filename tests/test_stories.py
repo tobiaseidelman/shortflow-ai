@@ -132,7 +132,7 @@ def test_plan_then_each_part_shares_story_context(tmp_path, monkeypatch):
     saved = story_engine.generate_story('Tema propio', 45, tmp_path, lambda m: None)
     assert saved['part1'] == result['part1'] and saved['part2'] == result['part2']
     assert len(calls) == 5
-    assert calls[0][1]['format'] == 'json'
+    assert calls[0][1]['format'] == story_engine.PLAN_SCHEMA
     assert 'format' not in calls[1][1]
     assert 'Tema propio' in calls[0][1]['messages'][1]['content']
     second_messages = calls[2][1]['messages']
@@ -154,7 +154,8 @@ def test_episode_revision_receives_actual_draft(monkeypatch):
         return next(replies)
     monkeypatch.setattr(story_engine, 'complete', complete)
     assert story_engine.write_episode([{'role': 'user', 'content': 'Tema'}, {'role': 'assistant', 'content': 'Episodio anterior que no hay que reescribir.'}], 45, lambda m: None) == good
-    assert all('Episodio anterior que no hay que reescribir.' not in m['content'] for m in calls[1])
+    assert 'Episodio anterior que no hay que reescribir.' in calls[1][1]['content']
+    assert 'CONTEXTO DE REFERENCIA, NO REESCRIBIR' in calls[1][1]['content']
     assert calls[1][-2]['content'] == 'Yo me fui.'
     assert 'entre' in calls[1][-1]['content']
 
