@@ -191,6 +191,8 @@ def complete(messages, json_mode=False):
                     'num_batch': 128, 'num_predict': 1800,
                     'seed': secrets.randbelow(2**31)},
     }
+    if MODEL.startswith('qwen3:'):
+        payload['think'] = False
     if json_mode:
         payload['format'] = json_mode if isinstance(json_mode, dict) else 'json'
         payload['options']['temperature'] = 0

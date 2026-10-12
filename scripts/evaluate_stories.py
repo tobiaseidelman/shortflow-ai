@@ -12,6 +12,9 @@ THEMES = {
  'trabajo': 'Mi jefa presentó mi propuesta como si fuera de ella. Durante la reunión, el cliente me preguntó por un cálculo que solo yo había preparado. La propuesta tiene mi historial de versiones. Quiero que reconozcan mi trabajo sin perder el empleo.',
  'convivencia': 'Mi compañero de apartamento cobraba a escondidas por prestar mi habitación cuando yo viajaba. Descubrí una reseña que mostraba mi escritorio. El alquiler está a nombre de ambos; quiero recuperar mi privacidad sin inventar que puedo echarlo de inmediato.',
 }
+if '--qwen3' in sys.argv:
+ story_engine.MODEL='qwen3:4b'
+print('EVALUATION_MODEL '+story_engine.MODEL,flush=True)
 original_complete=story_engine.complete
 def logged_complete(messages,json_mode=False):
  result=original_complete(messages,json_mode)
