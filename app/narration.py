@@ -162,19 +162,20 @@ def intro_card(text, seconds):
 
     shape(rounded(85, top+14, 910, height, 32), '000000', extra=r'\alpha&H70&\blur12')
     shape(rounded(85, top, 910, height, 32), 'FCFAFA')
-    # A conversation icon and short accent rule replace the brand label.
+    # One conversation icon accompanies the channel name.
     shape(rounded(130, top+35, 72, 72, 22), 'EFE4F3', 1)
     shape(rounded(145, top+53, 42, 29, 9) + f' m 153 {top+78} l 153 {top+91} 168 {top+78}', '965EE5', 2)
-    shape(rounded(220, top+60, 100, 8, 4), '965EE5', 1)
-    shape(rounded(220, top+78, 62, 6, 3), 'DAD0DF', 1)
+    channel = r'{\an4\pos(220,' + str(top+71) + r')\fs29\c&H655B69&}MOHAMED HISTORIAS'
+    events.append(f'Dialogue: 2,0:00:00.00,{end},Card,,0,0,0,,{channel}')
     for x in (913, 931, 949):
         shape(rounded(x, top+65, 7, 7, 3), 'A79BAE', 1)
     body = (r'{\an5\pos(540,' + str(top+135+len(lines)*32) + r')\fs52\c&H262020&}'
             + r'\N'.join(lines))
     events.append(f'Dialogue: 2,0:00:00.00,{end},Card,,0,0,0,,{body}')
     shape(f'm 130 {bottom-75} l 950 {bottom-75} 950 {bottom-73} 130 {bottom-73}', 'E9E3ED', 1)
-    # Quiet footer details: conversation and bookmark, without invented counters.
-    shape(rounded(135, bottom-53, 34, 24, 7) + f' m 140 {bottom-33} l 140 {bottom-24} 151 {bottom-33}', 'C9BBCE', 1)
-    shape(rounded(184, bottom-46, 75, 7, 3), 'E5DCE9', 1)
+    # A small subscription reminder, separate from the spoken introduction.
+    shape(rounded(130, bottom-60, 170, 43, 18), 'EFE4F3', 1)
+    subscribe = r'{\an5\pos(215,' + str(bottom-39) + r')\fs26\b0\c&H75617F&}Suscríbete'
+    events.append(f'Dialogue: 2,0:00:00.00,{end},Card,,0,0,0,,{subscribe}')
     shape(f'm 923 {bottom-54} l 945 {bottom-54} 945 {bottom-25} 934 {bottom-33} 923 {bottom-25}', '965EE5', 1)
     return events
