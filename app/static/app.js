@@ -164,6 +164,7 @@ function showStoryPair(job) {
   $('#storyReview').hidden=job.status!=='needs_review';
   job.parts.forEach(part=>{
     $('#storyPart'+part.number).value=part.text;
+    $('#storyIntro'+part.number).value=part.intro||'';
     $('#part'+part.number+'Words').textContent=part.words+' palabras · aprox. '+part.duration+' segundos';
   });
 }
@@ -234,9 +235,9 @@ function renderMessage(text,kind='loading') {
 async function savePart(number) {
   if(!currentPair)return;
   const part=currentPair.parts.find(p=>p.number===number);
-  const fd=new FormData();fd.append('text',$('#storyPart'+number).value);
+  const fd=new FormData();fd.append('text',$('#storyPart'+number).value);fd.append('intro',$('#storyIntro'+number).value);
   await storyRequest('/api/stories/'+part.id,{method:'PUT',body:fd});
-  part.text=$('#storyPart'+number).value;
+  part.text=$('#storyPart'+number).value;part.intro=$('#storyIntro'+number).value;
 }
 async function saveStories() {
   try {await savePart(1);await savePart(2);storyMessage('Cambios guardados.','ok');}

@@ -213,3 +213,7 @@ En **Fondos → ELEGIR FRAGMENTOS**, reproducí el archivo y usá **MARCAR INICI
 Los próximos shorts usarán únicamente esos fragmentos de ese fondo, combinados con los otros fondos seleccionados. **CREAR SHORT CON ESTE FRAGMENTO** exporta exactamente ese tramo completo como video vertical, con el recorte lateral guardado y sin narración. Si creás un short con duración fija o historia, el último fragmento puede acortarse para ajustarse a esa duración.
 
 **USAR TOMAS AUTOMÁTICAS** restaura la selección automática. Los originales y los clips referenciados por shorts anteriores se conservan. Reanalizar las tomas no reemplaza tu selección manual. El reproductor requiere un formato compatible con el navegador (preferentemente MP4/H.264). Si hay cambios desde otra pestaña, el guardado pide volver a abrir el editor para evitar sobrescribirlos.
+
+### Tarjeta de apertura narrada
+
+En Historias, cada parte tiene un campo opcional **Tarjeta de apertura** (hasta 220 caracteres). Escribí una frase breve que adelante el conflicto sin revelar el final y guardá los cambios. Se muestra una tarjeta blanca sobre el fondo mientras la misma voz masculina lee la frase; luego comienza el relato con sus subtítulos. Si dejás el campo vacío, el video empieza directamente con la historia. La apertura se conserva al retomar un render y al regenerar su fondo. Por ahora el texto de la tarjeta se escribe manualmente.

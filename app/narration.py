@@ -57,7 +57,7 @@ def speech_bounds(raw, sample_rate):
     return max(0,(active[0]-1)*step/sample_rate),min(len(samples)/sample_rate,(active[-1]+2)*step/sample_rate)
 
 
-def narrate(text, folder, storage, progress):
+def narrate(text, folder, storage, progress, intro=""):
     from piper import PiperVoice, SynthesisConfig
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
@@ -71,13 +71,16 @@ def narrate(text, folder, storage, progress):
         sentences = [s.strip() for s in re.split(r'(?<=[.!?;])\s+|\n+', paragraph) if s.strip()]
         for i, sentence in enumerate(sentences):
             phrases.append((sentence, .16 if phrases and i == 0 else 0))
+    if intro:
+        phrases.insert(0, (intro, 0))
+        if len(phrases)>1: phrases[1]=(phrases[1][0], .24)
     audio_path = folder / 'voice.wav'
     captions = []
     elapsed = 0.0
     progress('Creando la narración y los subtítulos…')
     with wave.open(str(audio_path), 'wb') as output:
         output.setnchannels(1); output.setsampwidth(2); output.setframerate(voice.config.sample_rate)
-        for phrase, pause in phrases:
+        for phrase_index, (phrase, pause) in enumerate(phrases):
             silence_frames = round(pause * voice.config.sample_rate)
             if silence_frames:
                 output.writeframes(b'\0\0' * silence_frames)
@@ -86,6 +89,10 @@ def narrate(text, folder, storage, progress):
             raw = b''.join(chunk.audio_int16_bytes for chunk in chunks)
             seconds = len(raw) / (2 * voice.config.sample_rate)
             output.writeframes(raw)
+            if intro and phrase_index == 0:
+                captions.extend(intro_card(intro, seconds))
+                elapsed += seconds
+                continue
             groups = caption_groups(phrase)
             start,stop = speech_bounds(raw,voice.config.sample_rate)
             cursor = elapsed+start
@@ -105,6 +112,7 @@ PlayResY: 1920
 WrapStyle: 0
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Card,DejaVu Sans,54,&H00202020,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,0,0,5,130,130,0,1
 Style: Default,DejaVu Sans,76,&H00FFFFFF,&H0000FFFF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,5,2,5,80,80,150,1
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -128,3 +136,17 @@ def overlay(background, audio, subtitles, output, duration):
                         '-movflags', '+faststart', str(Path(tmp) / 'final.mp4')],
                        cwd=tmp, check=True, capture_output=True, timeout=1200)
         Path(tmp, 'final.mp4').replace(output)
+
+
+def intro_card(text, seconds):
+    """A readable post-style card, timed to its own spoken introduction."""
+    import textwrap
+    safe = text.replace('\\', '').replace('{', '').replace('}', '')
+    lines = textwrap.wrap(' '.join(safe.split()), width=28)
+    label = r'{\an7\pos(135,700)\fs30\c&H777777&}SHORTFLOW · RELATO'
+    body = r'{\an5\pos(540,990)}' + r'\N'.join(lines)
+    end = timestamp(seconds)
+    box = r'{\an7\pos(0,0)\p1\bord0\shad0\c&HFFFFFF&}m 85 650 l 995 650 995 1310 85 1310'
+    return [f'Dialogue: 0,0:00:00.00,{end},Card,,0,0,0,,{box}',
+            f'Dialogue: 1,0:00:00.00,{end},Card,,0,0,0,,{label}',
+            f'Dialogue: 1,0:00:00.00,{end},Card,,0,0,0,,{body}']

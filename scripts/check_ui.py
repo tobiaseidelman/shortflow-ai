@@ -23,7 +23,9 @@ with tempfile.TemporaryDirectory() as temp:
   if path=='/api/stories':payload=[{'id':p['id'],'title':p['title'],'text':p['text']} for p in pair['parts']]
   elif path=='/api/story-generations':payload=[pair]
   elif path=='/api/story-generations/pair':payload=pair
-  elif path.startswith('/api/stories/') and request.method=='PUT':state['saved']+=1;payload={'status':'saved'}
+  elif path.startswith('/api/stories/') and request.method=='PUT':
+   assert 'name="intro"' in request.post_data
+   state['saved']+=1;payload={'status':'saved'}
   elif path=='/api/videos':payload=[{'id':1,'name':'<script>alert(1)</script>','duration':600,'width':1280,'height':720,'status':'ready','clips':208},{'id':2,'name':'Segundo fondo','duration':600,'width':1280,'height':720,'status':'ready','clips':208}]
   elif path=='/api/videos/1/source':
    data=preview.read_bytes();range_header=request.headers.get('range')
@@ -111,6 +113,7 @@ with tempfile.TemporaryDirectory() as temp:
   expect(page.locator('#urlMsg')).to_contain_text('208 clips')
   page.get_by_role('button',name='Historias',exact=True).click()
   expect(page.locator('#storyPart1')).to_have_value('Yo conté lo que pasó.')
+  page.locator('#storyIntro1').fill('Mi hermano vendió mi auto sin avisarme.')
   pair.update(status='needs_review',message='Borrador guardado. Revisá el parentesco <script>alert(1)</script>')
   page.evaluate("watchGeneration('pair')")
   expect(page.locator('#storyReview')).to_contain_text('Revisá el parentesco')

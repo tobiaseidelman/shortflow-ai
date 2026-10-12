@@ -4,9 +4,9 @@ import logging
 from pathlib import Path
 from .work_lock import compute_lock
 from uuid import uuid4
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from .db import SessionLocal
-from .models import Story, StoryGeneration, Short, BackgroundVideo, Clip, RenderJob, NarrationAsset, UsedClip, RenderPlan
+from .models import Story, StoryGeneration, Short, BackgroundVideo, Clip, RenderJob, NarrationAsset, UsedClip, RenderPlan, StoryIntro
 from . import narration
 from .background_routes import selected_clips, crop_settings, remember_selection
 from .video_engine import optimize, render
@@ -63,18 +63,18 @@ def run_job(job_id, snapshots, background_ids=''):
                 short.status = 'rendering'; current_id = short.id
                 if plan: plan.active_short_id = current_id
                 asset = session.get(NarrationAsset, current_id)
-                cached = (asset and asset.text_snapshot == snapshot['text'] and
+                cached = (asset and asset.text_snapshot == (snapshot.get('intro', '') + '\n\n' + snapshot['text'] if snapshot.get('intro') else snapshot['text']) and
                           Path(asset.audio_path).is_file() and Path(asset.subtitle_path).is_file())
                 if cached:
                     audio, captions, duration = Path(asset.audio_path), Path(asset.subtitle_path), short.duration
                 session.commit()
             folder = _storage / 'narration' / str(current_id)
             if not cached:
-                audio, captions, duration = narration.narrate(snapshot['text'], folder, _storage, progress)
+                audio, captions, duration = narration.narrate(snapshot['text'], folder, _storage, progress, **({'intro':snapshot['intro']} if snapshot.get('intro') else {}))
                 if options.get('preview'): duration = min(duration, 12)
                 with SessionLocal() as session:
                     session.get(Short, current_id).duration = duration
-                    session.merge(NarrationAsset(short_id=current_id, audio_path=str(audio), subtitle_path=str(captions), text_snapshot=snapshot['text']))
+                    session.merge(NarrationAsset(short_id=current_id, audio_path=str(audio), subtitle_path=str(captions), text_snapshot=(snapshot['intro'] + '\n\n' + snapshot['text'] if snapshot.get('intro') else snapshot['text'])))
                     session.commit()
             if duration > 600:
                 raise ValueError('La narración supera 10 minutos. Acortá el texto antes de generar el video.')
@@ -142,7 +142,8 @@ def create_job(tasks: BackgroundTasks, story_id: int = Form(0), generation_id: s
                     raise HTTPException(404, 'Historia no encontrada o vacía.')
                 if len(story.text) > 6000:
                     raise HTTPException(400, 'Acortá la historia a 6000 caracteres como máximo.')
-                snapshots.append({'id': sid, 'text': ' '.join(story.text.split()[:32]) if preview else story.text})
+                intro = session.get(StoryIntro, sid)
+                snapshots.append({'intro': intro.text if intro else '', 'id': sid, 'text': ' '.join(story.text.split()[:32]) if preview else story.text})
             job = RenderJob(id=str(uuid4()), status='running', message='Preparando videos…', story_ids=json.dumps(ids))
             session.add(job); session.flush()
             session.add(RenderPlan(job_id=job.id, payload=json.dumps({'snapshots': snapshots, 'background_ids': background_ids, 'crops':crop_settings(session), 'preview': preview})))
@@ -169,12 +170,16 @@ def get_job(job_id: str):
 
 
 @router.put('/api/stories/{story_id}')
-def edit_story(story_id: int, text: str = Form(..., min_length=1, max_length=6000)):
+async def edit_story(request: Request, story_id: int, text: str = Form(..., min_length=1, max_length=6000), intro: str | None = Form(None, max_length=220)):
+    has_intro = 'intro' in await request.form()
     if not text.strip(): raise HTTPException(400, 'La historia no puede quedar vacía.')
     with SessionLocal() as session:
         story = session.get(Story, story_id)
         if not story: raise HTTPException(404, 'Historia no encontrada.')
-        story.text = text.strip(); session.commit()
+        story.text = text.strip()
+        if has_intro:
+            session.merge(StoryIntro(story_id=story_id, text=' '.join((intro or '').split())))
+        session.commit()
     return {'status': 'saved'}
 
 

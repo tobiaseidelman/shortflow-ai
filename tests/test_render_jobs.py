@@ -197,3 +197,31 @@ def test_optimizer_never_repeats_even_partially_overlapping_ranges():
                 assert min(a.start_time+10,b.start_time+10)<=max(a.start_time,b.start_time)
     with pytest.raises(ValueError,match='sin repetir'):
         optimize(clips,50)
+
+
+def test_intro_persists_and_is_snapshotted_for_render(monkeypatch):
+    from app.models import StoryIntro, RenderPlan
+    captured=[]
+    def capture(job_id,snapshots,background_ids):
+        captured.extend(snapshots)
+        render_routes._lock.release()
+    monkeypatch.setattr(render_routes,'run_job',capture)
+    with TestClient(app) as client:
+        with SessionLocal() as session:
+            story=Story(title='Intro',text='El relato.',genre='Reddit',duration_target=30)
+            video=BackgroundVideo(name='Test',path='/unused',status='ready')
+            session.add_all([story,video]);session.flush()
+            session.add(Clip(source_video_id=video.id,start_time=0,end_time=30,duration=30,similarity_group='intro-test',motion_score=50,visual_change_score=50,action_onset=0,quality_score=50,hook_score=50,loop_score=50))
+            session.commit();sid=story.id;vid=video.id
+        assert client.put(f'/api/stories/{sid}',data={'text':'El relato.', 'intro':'  Mi hermano vendió mi auto.  '}).status_code==200
+        # Existing clients editing only the story must not erase the card.
+        assert client.put(f'/api/stories/{sid}',data={'text':'El relato editado.'}).status_code==200
+        result=client.post('/api/render-jobs',data={'story_id':sid,'background_ids':json.dumps([vid])})
+        assert result.status_code==202
+        assert captured[0]['intro']=='Mi hermano vendió mi auto.'
+        with SessionLocal() as session:
+            assert json.loads(session.get(RenderPlan,result.json()['id']).payload)['snapshots']==captured
+        assert client.put(f'/api/stories/{sid}',data={'text':'El relato.', 'intro':'x'*221}).status_code==422
+        assert client.put(f'/api/stories/{sid}',data={'text':'El relato.', 'intro':''}).status_code==200
+        with SessionLocal() as session:
+            assert session.get(StoryIntro,sid).text==''

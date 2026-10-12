@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
 from .db import SessionLocal
-from .models import Story, StoryGeneration, BackgroundAnalysis
+from .models import Story, StoryGeneration, BackgroundAnalysis, StoryIntro
 from . import story_engine
 
 router = APIRouter()
@@ -89,6 +89,7 @@ def serialize(job, session):
         story = session.get(Story, story_id) if story_id else None
         if story:
             parts.append({'number': number, 'id': story.id, 'title': story.title, 'text': story.text,
+                          'intro': (session.get(StoryIntro, story.id).text if session.get(StoryIntro, story.id) else ''),
                           'duration': story.duration_target, 'words': len(story.text.split())})
     return {'id': job.id, 'title': job.title, 'theme': job.theme, 'duration': job.duration,
             'status': job.status, 'message': job.message, 'parts': parts}

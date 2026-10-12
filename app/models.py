@@ -99,3 +99,9 @@ class ManualBackgroundSegments(Base):
     video_id: Mapped[int] = mapped_column(ForeignKey('background_videos.id'), primary_key=True)
     clip_ids: Mapped[str] = mapped_column(Text, default='[]')
     revision: Mapped[str] = mapped_column(String(36))
+
+
+class StoryIntro(Base):
+    __tablename__ = 'story_intros'
+    story_id: Mapped[int] = mapped_column(ForeignKey('stories.id'), primary_key=True)
+    text: Mapped[str] = mapped_column(Text, default='')
