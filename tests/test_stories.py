@@ -237,25 +237,23 @@ def test_model_memory_failure_explains_cause(monkeypatch):
         story_engine.complete([])
 
 
-def test_continuity_repair_passes_corrected_first_part_to_second(monkeypatch):
+def test_continuity_review_checks_exact_patched_pair(monkeypatch):
     draft = sample_story()
-    repaired = {'part1': 'Yo ' + draft['part1'], 'part2': 'Me ' + draft['part2']}
+    repaired = {**draft, 'part1': 'Yo ' + draft['part1'], 'part2': 'Me ' + draft['part2']}
     verdicts = iter(['{"issues": ["Cambió hermano por hermana"]}', '{"issues": []}'])
-    reviews, revisions = [], []
+    reviews = []
     def review(messages, json_mode=False):
-        assert json_mode
         reviews.append(json.loads(messages[1]['content']))
         return next(verdicts)
-    def write(messages, duration, progress):
-        revisions.append(messages[1]['content'])
-        return repaired['part1' if len(revisions) == 1 else 'part2']
+    def repair(complete, theme, source, issues):
+        assert source == draft
+        assert theme == 'Mi hermano me pidió dinero'
+        assert issues == ['Cambió hermano por hermana']
+        return repaired
     monkeypatch.setattr(story_engine, 'complete', review)
-    monkeypatch.setattr(story_engine, 'write_episode', write)
-    result = story_engine.review_and_repair('Mi hermano me pidió dinero', draft, 45, lambda m: None)
-    assert result['part1'] == repaired['part1']
-    assert result['part2'] == repaired['part2']
-    assert repaired['part1'] in revisions[1]
-    assert 'Mi hermano me pidió dinero' in revisions[0]
+    monkeypatch.setattr(story_engine, 'repair_draft', repair)
+    result = story_engine.review_and_repair('Mi hermano me pidió dinero', draft, 45, lambda _: None)
+    assert result == repaired
     assert reviews[1]['parte1'] == repaired['part1']
     assert reviews[1]['parte2'] == repaired['part2']
 
@@ -267,8 +265,7 @@ def test_unresolved_contradictions_preserve_draft_after_one_repair(monkeypatch):
         return '{"issues": ["El personaje aparece en un lugar sin explicación"]}'
     monkeypatch.setattr(story_engine, 'complete', review)
     # Keep the two parts distinct while simulating a reviewer that still rejects them.
-    drafts = iter(['Yo ' + sample_story()['part1'], 'Me ' + sample_story()['part2']])
-    monkeypatch.setattr(story_engine, 'write_episode', lambda *args: next(drafts))
+    monkeypatch.setattr(story_engine, 'repair_draft', lambda *args: {**sample_story(), 'part1':'Yo '+sample_story()['part1'], 'part2':'Me '+sample_story()['part2']})
     result = story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)
     assert result['review_issues'] == ['El personaje aparece en un lugar sin explicación']
     assert result['part1'].startswith('Yo ')
@@ -358,7 +355,7 @@ def test_failed_repair_keeps_last_complete_pair(monkeypatch):
     monkeypatch.setattr(story_engine, 'complete', lambda *args, **kwargs: '{"issues":["El parentesco cambia"]}')
     def fail(*args):
         raise story_engine.StoryGenerationError('Sin conexión')
-    monkeypatch.setattr(story_engine, 'write_episode', fail)
+    monkeypatch.setattr(story_engine, 'repair_draft', fail)
     result = story_engine.review_and_repair('Tema', sample_story(), 45, lambda m: None)
     assert result['part1'] == sample_story()['part1']
     assert result['part2'] == sample_story()['part2']
@@ -369,9 +366,8 @@ def test_repetition_is_repaired_instead_of_aborting(monkeypatch):
     repeated = sample_story()
     repeated['part2'] = repeated['part1']
     fixed = sample_story()
-    edits = iter([fixed['part1'], fixed['part2']])
     monkeypatch.setattr(story_engine, 'request_review', lambda *args: [])
-    monkeypatch.setattr(story_engine, 'write_episode', lambda *args: next(edits))
+    monkeypatch.setattr(story_engine, 'repair_draft', lambda *args: fixed)
     result = story_engine.review_and_repair('Tema', repeated, 45, lambda _: None)
     assert result == fixed
 
@@ -380,7 +376,7 @@ def test_repetition_cannot_be_approved_by_model_and_draft_survives(client, monke
     repeated = sample_story()
     repeated['part2'] = repeated['part1']
     monkeypatch.setattr(story_engine, 'request_review', lambda *args: [])
-    monkeypatch.setattr(story_engine, 'write_episode', lambda *args: repeated['part1'])
+    monkeypatch.setattr(story_engine, 'repair_draft', lambda *args: repeated)
     monkeypatch.setattr(story_engine, 'generate_story', lambda *args:
                         story_engine.review_and_repair('Tema', repeated, 45, lambda _: None))
     response = client.post('/api/stories', data={'duration':45})

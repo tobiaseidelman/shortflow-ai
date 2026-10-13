@@ -1,4 +1,6 @@
 """Generate connected fictional Reddit-style episodes with local Ollama only."""
+from .story_edits import repair_draft
+
 import atexit
 import json
 import logging
@@ -356,24 +358,11 @@ def review_and_repair(theme, draft, duration, progress):
         if attempt:
             return {**draft, 'review_issues': length_notes + issues}
         progress('Corrigiendo las contradicciones encontradas…')
-        original = {key: draft[key] for key in ('part1', 'part2')}
-        repaired = dict(draft)
-        for key in ('part1', 'part2'):
-            context = {'tema_original': theme, 'plan_de_referencia': draft['plan'], 'errores_a_corregir': issues,
-                       'borrador_parte1': original['part1'], 'borrador_parte2': original['part2']}
-            if key == 'part2':
-                del context['borrador_parte1']
-                context['parte1_definitiva'] = repaired['part1']
-            prompt = (json.dumps(context, ensure_ascii=False) +
-                      f'\nCorregí SOLO {key}. Entre {round(duration * 1.7)} y '
-                      f'{round(duration * 2.9)} palabras. Conservá los hechos correctos; '
-                      'no agregues otra trama. La parte 1 deja el enfrentamiento pendiente; '
-                      'la parte 2 retoma la parte 1 definitiva y muestra la consecuencia. Solo prosa.')
-            try:
-                repaired[key] = write_episode([{'role': 'system', 'content': SYSTEM},
-                                               {'role': 'user', 'content': prompt}], duration, progress)
-            except (ValueError, StoryGenerationError):
-                return {**draft, 'review_issues': length_notes + issues + ['La corrección automática no terminó; conservamos el borrador anterior.']}
+        try:
+            repaired = repair_draft(complete, theme, draft, issues)
+        except (ValueError, StoryGenerationError):
+            return {**draft, 'review_issues': length_notes + issues + [
+                'La corrección no pudo aplicarse con precisión; conservamos el borrador anterior.']}
         try:
             draft = validate_story(repaired, duration, allow_repetition=True, allow_length=True)
         except ValueError:
