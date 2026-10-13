@@ -59,7 +59,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ fromJSON(contains(github.event.head_commit.message, '[story-eval-convivencia]') && '["convivencia"]' || '["auto","trabajo","convivencia"]') }}
+        case: ${{ fromJSON(contains(github.event.head_commit.message, '[story-eval-input]') && '["libre","breve","auto"]' || contains(github.event.head_commit.message, '[story-eval-convivencia]') && '["convivencia"]' || '["auto","trabajo","convivencia"]') }}
     steps:
       - uses: actions/checkout@v4
       - name: Build Codespaces image
