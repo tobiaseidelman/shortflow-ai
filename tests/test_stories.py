@@ -171,9 +171,19 @@ def test_bad_output_is_retried_once_then_reported(monkeypatch):
     assert len(calls) == 2
 
 
-def test_rejects_third_person_episode():
-    with pytest.raises(ValueError, match='primera persona'):
-        story_engine.validate_episode(sample_story()['part1'], 45)
+def test_implicit_first_person_is_preserved_without_padding(monkeypatch):
+    text = ('Miré el cajón del escritorio y encontré una carta que explicaba lo ocurrido. '
+            'Decidí pedir una explicación antes de sacar conclusiones. Llegué al despacho, '
+            'dudé un instante y toqué la puerta. Escuché pasos dentro y esperé junto a '
+            'la ventana hasta que Andrés abrió con los documentos en la mano.')
+    calls = []
+    def complete(messages):
+        calls.append(messages)
+        return text
+    monkeypatch.setattr(story_engine, 'complete', complete)
+    assert story_engine.write_episode([], 60, lambda _: None) == text
+    assert len(calls) == 1
+    assert story_engine.validate_episode(text, 60, allow_length=True) == text
 
 
 def test_missing_ollama_gives_setup_instructions(tmp_path, monkeypatch):

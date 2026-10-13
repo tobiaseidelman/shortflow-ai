@@ -228,8 +228,8 @@ def validate_episode(text, duration, *, allow_length=False):
         raise ValueError(f'Hay {count} palabras; se necesitan entre {low} y {high}.')
     if text.rstrip('”"\'»')[-1:] not in '.!?…':
         raise ValueError('La última frase está incompleta.')
-    if not re.search(r'\b(yo|me|mi|mis|conmigo)\b', text, re.IGNORECASE):
-        raise ValueError('El protagonista debe contar su propia experiencia en primera persona.')
+    # Spanish often omits the subject (llegué, miré, decidí). Pronoun absence
+    # cannot prove third person; narrative perspective belongs in semantic review.
     if re.search(r'(?im)^\s*(parte [12]|aquí (tienes|está)|título:|plan:)', text):
         raise ValueError('Entregá solo la narración, sin títulos ni explicaciones.')
     return text
@@ -243,6 +243,12 @@ def write_episode(messages, duration, progress):
         try:
             return validate_episode(text, duration)
         except ValueError as exc:
+            if 40 <= len(text.split()) < round(duration * 1.7):
+                try:
+                    # Do not invent additional events just to pad narration time.
+                    return validate_episode(text, duration, allow_length=True)
+                except ValueError:
+                    pass
             if attempt:
                 # Duration is approximate; preserve complete prose after one bounded edit.
                 try:
@@ -325,7 +331,7 @@ def review_and_repair(theme, draft, duration, progress):
         review_messages = [
             {'role': 'system', 'content':
              'Sos editor de continuidad. Compará los DOS textos con el TEMA ORIGINAL. '
-             'Detectá solo errores concretos: parentescos o motivos cambiados, pagar confundido '
+             'Detectá solo errores concretos: cambios de narrador o punto de vista, parentescos o motivos cambiados, pagar confundido '
              'con trabajar, dinero u objetos sin origen, hechos que se contradicen, cronología '
              'imposible, personajes que saben algo sin enterarse, corte desconectado o desenlace '
              'ausente, parlamentos sin identificar quién habla ANTES, escenas repetidas sin avanzar o una promesa de revelación que sustituye la acción del corte. El tema tiene prioridad sobre cualquier invención. No pidas cambios '

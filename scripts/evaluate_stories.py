@@ -30,7 +30,13 @@ story_engine.complete=logged_complete
 case=sys.argv[1]
 try:
  with tempfile.TemporaryDirectory(prefix='story-eval-') as folder:
-  if '--simple' in sys.argv:
+  if '--continuous' in sys.argv:
+   story_engine.ensure_model(Path(folder),lambda m:print(m,flush=True))
+   raw=story_engine.complete([
+    {'role':'system','content':'Escribí una historia completa de unas 280 palabras, en español y primera persona. Narración oral, con acciones claras y conversaciones contadas indirectamente. El protagonista enfrenta un conflicto y toma una decisión; contá las consecuencias concretas y cerrá la historia. Conservá quién hace cada cosa, quién es dueño y quién paga a quién. Usá seis párrafos. Entregá solo el relato, sin título ni explicaciones.'},
+    {'role':'user','content':THEMES[case] or 'Inventá un conflicto cotidiano original. Elegí libremente el tema y los personajes.'}])
+   result={'story':raw}
+  elif '--simple' in sys.argv:
    story_engine.ensure_model(Path(folder),lambda m:print(m,flush=True))
    schema={'type':'object','properties':{k:{'type':'string'} for k in ('title','part1','part2')},'required':['title','part1','part2'],'additionalProperties':False}
    raw=story_engine.complete([
