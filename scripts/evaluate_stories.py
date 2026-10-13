@@ -14,6 +14,8 @@ THEMES = {
 }
 if '--qwen3' in sys.argv:
  story_engine.MODEL='qwen3:4b-instruct-2507-q4_K_M'
+if '--gemma' in sys.argv:
+ story_engine.MODEL='gemma3:4b'
 print('EVALUATION_MODEL '+story_engine.MODEL,flush=True)
 original_complete=story_engine.complete
 def logged_complete(messages,json_mode=False):
