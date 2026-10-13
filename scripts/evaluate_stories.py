@@ -24,6 +24,14 @@ story_engine.complete=logged_complete
 case=sys.argv[1]
 try:
  with tempfile.TemporaryDirectory(prefix='story-eval-') as folder:
-  result=generate_story(THEMES[case],60,Path(folder),lambda m:print(m,flush=True))
+  if '--simple' in sys.argv:
+   story_engine.ensure_model(Path(folder),lambda m:print(m,flush=True))
+   schema={'type':'object','properties':{k:{'type':'string'} for k in ('title','part1','part2')},'required':['title','part1','part2'],'additionalProperties':False}
+   raw=story_engine.complete([
+    {'role':'system','content':'Escribí un relato realista en primera persona en español. Conservá los hechos del tema. Una sola voz narra acciones y conversaciones de forma indirecta. Escribí dos partes de unas 140 palabras cada una: la primera termina durante el enfrentamiento y la segunda continúa esa misma escena y resuelve el conflicto. Usá acciones concretas, sin repetir escenas ni cambiar quién hizo cada cosa. Devolvé el JSON con título y ambas partes.'},
+    {'role':'user','content':THEMES[case]}],json_mode=schema)
+   result=json.loads(raw)
+  else:
+   result=generate_story(THEMES[case],60,Path(folder),lambda m:print(m,flush=True))
   print('EVALUATION_RESULT '+json.dumps({'case':case,'theme':THEMES[case],**result},ensure_ascii=False),flush=True)
 finally:stop_server()
