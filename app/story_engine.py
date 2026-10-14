@@ -290,6 +290,8 @@ def parse_review(raw):
     for item in items:
         if isinstance(item, str):
             if item.strip():
+                if not any(char.isalpha() for char in item):
+                    raise ValueError('Observación sin descripción del error.')
                 issues.append(item.strip())
         elif (isinstance(item, dict) and item and
               all(isinstance(value, str) for value in item.values()) and

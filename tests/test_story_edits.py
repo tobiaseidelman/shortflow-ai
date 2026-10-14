@@ -42,3 +42,22 @@ def test_duplicate_anchor_must_include_context():
     with pytest.raises(ValueError):
         apply_edits(source, json.dumps({'edits': [
             {'part':'part2','before':'Me fui.','after':'Volví.'}]}))
+
+
+def test_full_paragraph_quote_can_anchor_a_small_payment_fix():
+    source = draft()
+    changed = apply_edits(source, json.dumps({'edits': [{
+        'part':'part2', 'before':source['part2'],
+        'after':source['part2'].replace('El comprador devolvió la seña.', 'Mi hermano devolvió la seña al comprador.')
+    }]}))
+    assert changed['part2'] == source['part2'].replace('El comprador devolvió la seña.', 'Mi hermano devolvió la seña al comprador.')
+    assert changed['part1'] == source['part1']
+
+
+def test_two_edits_cannot_insert_at_the_same_position():
+    source = draft()
+    with pytest.raises(ValueError):
+        apply_edits(source, json.dumps({'edits': [
+            {'part':'part2', 'before':'El comprador', 'after':'El comprador nervioso'},
+            {'part':'part2', 'before':'El comprador', 'after':'El comprador triste'},
+        ]}))

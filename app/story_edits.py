@@ -29,8 +29,22 @@ def apply_edits(draft, raw):
         if before == after or draft[part].count(before) != 1:
             raise ValueError('El fragmento debe aparecer exactamente una vez y cambiar.')
         start = draft[part].index(before)
-        end = start + len(before)
-        if any(start < old_end and end > old_start for old_start, old_end, _ in spans[part]):
+        # Models may quote a whole paragraph to locate a one-word correction.
+        # Count and apply only the actual changed span, preserving the quoted context.
+        prefix = 0
+        while prefix < min(len(before), len(after)) and before[prefix] == after[prefix]:
+            prefix += 1
+        suffix = 0
+        while (suffix < min(len(before), len(after)) - prefix and
+               before[-suffix - 1] == after[-suffix - 1]):
+            suffix += 1
+        end = start + len(before) - suffix
+        start += prefix
+        after = after[prefix:len(after) - suffix if suffix else len(after)]
+        if any((start < old_end and end > old_start) or
+               (start == end and old_start <= start <= old_end) or
+               (old_start == old_end and start <= old_start <= end)
+               for old_start, old_end, _ in spans[part]):
             raise ValueError('Las correcciones se superponen.')
         spans[part].append((start, end, after))
     result = dict(draft)

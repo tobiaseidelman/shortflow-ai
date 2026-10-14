@@ -416,3 +416,8 @@ def test_short_but_complete_episode_survives_duration_revision(monkeypatch):
     assert result['part1']==text
     assert 'duración' in result['review_issues'][0]
     with pytest.raises(ValueError):story_engine.validate_story(draft,60)
+
+
+def test_punctuation_is_not_a_continuity_finding():
+    with pytest.raises(ValueError, match='descripción'):
+        story_engine.parse_review('{"issues":["{"]}')
