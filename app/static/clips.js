@@ -19,7 +19,7 @@ async function loadClipProjects() {
     if(!jobs.length)box.textContent='Todavía no subiste videos a Clips.';
     jobs.forEach(job=>{
       const row=document.createElement('div');row.className='clip-project-row';
-      row.append(clipButton(job.name+' · '+job.status,()=>openClipProject(job.id)));
+      row.append(clipButton(job.name+' · '+({uploading:'Subiendo',uploaded:'Listo para analizar',analyzing:'Analizando',review:'Para revisar',exporting:'Exportando',ready:'Listo',failed:'Interrumpido'}[job.status]||'Guardado'),()=>openClipProject(job.id)));
       box.append(row);
     });
     if(!clipProject&&!clipBusy&&jobs.length)await openClipProject(jobs[0].id);
@@ -81,15 +81,22 @@ async function uploadClipVideo() {
     let saved;try{saved=JSON.parse(localStorage.getItem('shortflow-clip-upload'));}catch(e){}
     let job;
     if(saved?.name===file.name&&saved?.size===file.size&&saved?.modified===file.lastModified){
-      try{job=await storyRequest(clipAPI+'/'+saved.id);if(job.status!=='uploading')job=null;}catch(e){if(e.status!==404)throw e;}
+      try{
+        job=await storyRequest(clipAPI+'/'+saved.id);
+        if(job.status!=='uploading'&&job.status!=='failed'){
+          clipProject=job;clipDirty=false;drawClipProject();
+          try{localStorage.removeItem('shortflow-clip-upload');}catch(e){}
+          clipBusy=false;
+          if(job.status==='uploaded')await analyzeClipVideo();
+          else if(['analyzing','exporting'].includes(job.status))await watchClipProject(job.id);
+          return;
+        }
+        if(job.status==='failed')job=null;
+      }catch(e){if(e.status!==404)throw e;}
     }
     // A restored server-side pending upload is resumable after browser storage is cleared.
     if(!job&&clipProject?.status==='uploading'&&clipProject.size===file.size&&clipProject.name===file.name){
       job=clipProject;
-      if(job.received){
-        // Verify the beginning matches before appending to a restored upload.
-        await storyRequest(clipAPI+'/'+job.id+'/chunks?offset=0',{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:file.slice(0,Math.min(job.received,job.chunk_size))});
-      }
     }
     if(job?.received){await storyRequest(clipAPI+'/'+job.id+'/chunks?offset=0',{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:file.slice(0,Math.min(job.received,job.chunk_size))});}
     if(!job)job=await clipRequest('',{name:file.name,size:file.size,count:Number(document.querySelector('#clipCount').value),maximum:Number(document.querySelector('#clipMaximum').value)});

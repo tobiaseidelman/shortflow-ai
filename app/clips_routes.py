@@ -4,7 +4,6 @@ import json
 import logging
 import math
 from pathlib import Path
-import re
 import shutil
 from threading import Lock
 from uuid import uuid4
@@ -100,7 +99,7 @@ def create(data: NewProject):
             raise HTTPException(409, 'Ya hay una subida de Clips pendiente. Abrila para reanudarla o eliminarla.')
         if shutil.disk_usage(_storage).free < data.size * 2 + 256 * 1024**2:
             raise HTTPException(507, 'No hay espacio suficiente para el original y los recortes.')
-        job = ClipProject(id=str(uuid4()), name=re.sub(r'[^\w. -]', '_', Path(data.name).name),
+        job = ClipProject(id=str(uuid4()), name=Path(data.name).name,
                           size=data.size, count=data.count, maximum=data.maximum)
         session.add(job)
         session.commit()
@@ -335,7 +334,7 @@ def download(id: str, name: str):
         job = get(session, id)
         if name not in [e['name'] for e in json.loads(job.exports)] or not (folder(job) / name).is_file():
             raise HTTPException(404, 'Clip no disponible.')
-        return FileResponse(folder(job) / name, media_type='video/mp4', filename='clip-' + name[-5:])
+        return FileResponse(folder(job) / name, media_type='video/mp4', filename='clip-' + name.rsplit('-', 1)[-1])
 
 
 @router.delete('/{id}')

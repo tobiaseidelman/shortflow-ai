@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import cv2
+import numpy as np
 from . import story_engine
 
 VISION_MODEL = 'moondream:1.8b'
@@ -21,6 +22,24 @@ def unload(model):
         pass
 
 
+def audio_samples(source, folder):
+    # Normalize with our existing FFmpeg runtime. Passing samples avoids PyAV
+    # decoder API changes and consistently handles MP4 audio codecs.
+    pcm = Path(folder) / 'speech.pcm'
+    try:
+        subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', '-i', str(source),
+                        '-t', str(MAX_DURATION), '-map', '0:a:0', '-ac', '1', '-ar', '16000',
+                        '-f', 's16le', str(pcm)], check=True, capture_output=True, timeout=300)
+        samples = np.fromfile(pcm, dtype='<i2').astype(np.float32) / 32768.0
+        if not len(samples):
+            raise ValueError('El video no tiene audio utilizable. Podés marcar los clips manualmente.')
+        return samples
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raise ValueError('No se pudo leer el audio del MP4. Podés elegir los fragmentos manualmente.') from exc
+    finally:
+        pcm.unlink(missing_ok=True)
+
+
 def transcribe(source, folder, progress):
     cache = Path(folder) / 'transcript.json'
     if cache.exists():
@@ -32,7 +51,7 @@ def transcribe(source, folder, progress):
     progress('Preparando la transcripción local. La primera vez descarga el modelo de voz…')
     model = WhisperModel('small', device='cpu', compute_type='int8', cpu_threads=2,
                          download_root=str(Path(folder).parent / 'speech-models'))
-    segments, _ = model.transcribe(str(source), beam_size=3, word_timestamps=True,
+    segments, _ = model.transcribe(audio_samples(source, folder), beam_size=3, word_timestamps=True,
                                    vad_filter=True, condition_on_previous_text=False)
     sentences, words = [], []
     for segment in segments:

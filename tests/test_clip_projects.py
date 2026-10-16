@@ -205,6 +205,7 @@ def test_transcription_joins_asr_chunks_at_sentence_boundaries(tmp_path,monkeypa
     import sys
     from types import SimpleNamespace as NS
     monkeypatch.setattr(engine,'unload',lambda *args:None)
+    monkeypatch.setattr(engine,'audio_samples',lambda *args:engine.np.zeros(16000,dtype=engine.np.float32))
     class Whisper:
         def __init__(self,*args,**kwargs):assert kwargs['compute_type']=='int8'
         def transcribe(self,*args,**kwargs):
@@ -218,3 +219,12 @@ def test_transcription_joins_asr_chunks_at_sentence_boundaries(tmp_path,monkeypa
     assert len(result)==3
     monkeypatch.setitem(sys.modules,'faster_whisper',None)
     assert engine.transcribe('source.mp4',tmp_path,lambda _:None)==result
+
+
+def test_real_mp4_audio_normalized_without_decoder_api(client,video,tmp_path):
+    path=tmp_path/'source.mp4';path.write_bytes(video)
+    samples=engine.audio_samples(path,tmp_path)
+    assert samples.dtype==engine.np.float32
+    assert abs(len(samples)/16000-5)<.1
+    assert abs(samples).max()>.01
+    assert not (tmp_path/'speech.pcm').exists()

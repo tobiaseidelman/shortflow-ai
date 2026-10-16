@@ -13,7 +13,7 @@ with tempfile.TemporaryDirectory() as temp:
     from app.main import app
     with TestClient(app) as client:
         html=client.get('/').text
-    state={'job':None,'chunks':[],'errors':[]}
+    state={'job':None,'chunks':[],'errors':[],'lose_complete':True}
     def handle(route):
         req=route.request;path=urlsplit(req.url).path;job=state['job'];data=[]
         if path=='/':return route.fulfill(status=200,content_type='text/html',body=html)
@@ -33,6 +33,9 @@ with tempfile.TemporaryDirectory() as temp:
         elif path.endswith('/complete'):
             assert job['received']==job['size']
             job.update(status='uploaded',duration=200,source='/api/clip-projects/example/source');data=job
+            if state['lose_complete']:
+                state['lose_complete']=False
+                return route.fulfill(status=503,content_type='application/json',body=json.dumps({'detail':'Respuesta perdida después de guardar.'}))
         elif path.endswith('/analyze'):
             job.update(status='review',message='Propuestas listas',revision=1,clips=[{'start':10,'end':40,'title':'<img src=x onerror=alert(1)>','reason':'El resultado todavía no aparece.'}]);data=job
         elif path.endswith('/clips') and req.method=='PUT':
@@ -53,6 +56,8 @@ with tempfile.TemporaryDirectory() as temp:
         page.get_by_role('button',name='Clips',exact=True).click()
         expect(page.locator('#clips')).to_be_visible()
         page.locator('#clipFile').set_input_files({'name':'challenge.mp4','mimeType':'video/mp4','buffer':b'x'*(9*1024**2)})
+        page.get_by_role('button',name='SUBIR Y BUSCAR CLIPS',exact=True).click()
+        expect(page.locator('#clipsMessage')).to_contain_text('Respuesta perdida',timeout=15000)
         page.get_by_role('button',name='SUBIR Y BUSCAR CLIPS',exact=True).click()
         expect(page.locator('#clipsMessage')).to_contain_text('Propuestas listas',timeout=15000)
         assert state['chunks']==[4*1024**2,4*1024**2,1024**2]
