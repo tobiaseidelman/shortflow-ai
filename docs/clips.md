@@ -26,7 +26,7 @@ ningún archivo en redes sociales.
 
 Después de actualizar el repositorio, instalá `requirements.txt` en el entorno
 virtual y reiniciá la aplicación. Se agrega `faster-whisper` para transcribir.
-La primera ejecución descarga Whisper small y Moondream 1.8b, además del modelo
+La primera ejecución descarga Whisper small y Gemma 3 4B, además del modelo
 de texto existente si todavía no está descargado. Se usan secuencialmente para
 reducir el consumo de memoria. El análisis puede ser lento en CPU; la pantalla
 muestra la fase actual y se puede recuperar al volver a Clips.

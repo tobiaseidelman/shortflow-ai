@@ -4,7 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import subprocess
 from app.narration import narrate
-from app.clips_engine import propose
+from app.clips_engine import propose, transcribe
 from app.video_engine import metadata
 
 with TemporaryDirectory(prefix='shortflow-clips-ai-') as temp:
@@ -29,7 +29,10 @@ with TemporaryDirectory(prefix='shortflow-clips-ai-') as temp:
     (root/'list.txt').write_text("file 'before.mp4'\nfile 'after.mp4'\n")
     subprocess.run(['ffmpeg','-v','error','-f','concat','-safe','0','-i',str(root/'list.txt'),'-c','copy',str(source)],check=True)
     analysis=root/'clip-projects'/'smoke';analysis.mkdir(parents=True)
-    result=propose(source,analysis,metadata(source)['duration'],1,90,root,print)
+    progress=lambda message: print(message,flush=True)
+    print('Reveal starts at',d1,flush=True)
+    print('TRANSCRIPT:',json.dumps(transcribe(source,analysis,progress),ensure_ascii=False),flush=True)
+    result=propose(source,analysis,metadata(source)['duration'],1,90,root,progress)
     print('REAL CLIPS PROPOSALS:',json.dumps(result,ensure_ascii=False),flush=True)
     assert result, 'No usable suspense proposal in controlled reveal'
     assert result[0]['end']<=d1+.5, 'The cut already includes the revealed image'

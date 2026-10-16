@@ -2,6 +2,7 @@
 import base64
 import gc
 import json
+import logging
 import math
 import os
 from pathlib import Path
@@ -10,7 +11,7 @@ import cv2
 import numpy as np
 from . import story_engine
 
-VISION_MODEL = 'moondream:1.8b'
+VISION_MODEL = 'gemma3:4b'
 MAX_DURATION = 1800
 
 
@@ -121,7 +122,7 @@ def validate_proposals(raw, sentences, duration, maximum=90):
 
 def visual_evidence(source, proposals, duration, progress):
     unload(story_engine.MODEL)
-    progress('Preparando revisión de imágenes (primera descarga visual: aprox. 1,7 GB)…')
+    progress('Preparando revisión de imágenes (primera descarga visual: aprox. 3,4 GB)…')
     with story_engine._request('/api/pull', {'model': VISION_MODEL, 'stream': False}, timeout=1800) as response:
         if json.load(response).get('status') != 'success':
             raise ValueError('No se pudo descargar el modelo visual. Reintentá el análisis.')
@@ -142,14 +143,15 @@ def visual_evidence(source, proposals, duration, progress):
                 if not ok:
                     raise ValueError('No se pudo leer el fotograma.')
                 payload = {'model': VISION_MODEL, 'stream': False, 'keep_alive': '2m',
-                           'prompt': 'Describe only the visible action and any visible result in this image. Do not infer events outside the image.',
-                           'images': [base64.b64encode(encoded).decode()],
-                           'options': {'num_predict': 130, 'num_ctx': 2048, 'num_batch': 64, 'use_mmap': True, 'temperature': 0}}
-                with story_engine._request('/api/generate', payload, timeout=600) as response:
+                           'messages': [{'role': 'user', 'content': 'Describe only the visible action and any visible result in this image. Do not infer events outside the image.', 'images': [base64.b64encode(encoded).decode()]}],
+                           'options': {'num_predict': 200, 'num_ctx': 4096, 'num_batch': 64, 'use_mmap': True, 'temperature': 0}}
+                with story_engine._request('/api/chat', payload, timeout=600) as response:
                     data = json.load(response)
-                if not data.get('done') or not data.get('response', '').strip():
+                description = data.get('message', {}).get('content', '').strip()
+                if not data.get('done') or not description:
+                    logging.getLogger(__name__).warning('Incomplete visual response: %s', {k: data.get(k) for k in ('done', 'done_reason', 'error', 'eval_count')})
                     raise ValueError('La revisión visual quedó incompleta. Reintentá el análisis.')
-                descriptions.append(f'{label}: {data["response"][:900]}')
+                descriptions.append(f'{label}: {description[:900]}')
             clip['visual'] = '\n'.join(descriptions)
     finally:
         cap.release()
