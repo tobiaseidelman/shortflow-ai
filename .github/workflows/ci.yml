@@ -69,3 +69,16 @@ jobs:
         run: >-
           docker run --rm -v "$PWD:/workspace" -w /workspace shortflow-codespaces
           bash -c 'python -m venv .venv && .venv/bin/python -m pip install -r requirements.txt && .venv/bin/python -m scripts.evaluate_stories ${{ matrix.case }} ${{ contains(github.event.head_commit.message, '[story-eval-input-continuous]') && '--continuous' || contains(github.event.head_commit.message, '[story-eval-llama]') && '--llama --simple' || contains(github.event.head_commit.message, '[story-eval-qwen3]') && '--qwen3 --simple' || '' }}'
+
+  clips-ai-smoke:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[clips-smoke]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Codespaces image
+        run: docker build -t shortflow-clips .devcontainer
+      - name: Exercise real speech and visual analysis on controlled reveal
+        run: >-
+          docker run --rm -v "$PWD:/workspace" -w /workspace shortflow-clips
+          bash -c 'python -m venv .venv && .venv/bin/python -m pip install -r requirements.txt && .venv/bin/python -m scripts.check_clips_ai'

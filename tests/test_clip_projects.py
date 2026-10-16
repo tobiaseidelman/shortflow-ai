@@ -177,3 +177,44 @@ def test_export_cleanup_on_timeout(tmp_path,monkeypatch):
     monkeypatch.setattr(subprocess,'run',fail)
     with pytest.raises(subprocess.TimeoutExpired):engine.export_clip('source.mp4',dest,0,5,True)
     assert not dest.exists() and not (tmp_path/'clip.partial.mp4').exists()
+
+
+def test_automatic_pipeline_requires_visual_review(tmp_path,monkeypatch):
+    sentences=[{'id':i,'start':i*5,'end':i*5+4,'text':f'Frase {i}.'} for i in range(10)]
+    monkeypatch.setattr(engine,'transcribe',lambda *args:sentences)
+    monkeypatch.setattr(engine.story_engine,'ensure_model',lambda *args:None)
+    monkeypatch.setattr(engine,'unload',lambda *args:None)
+    evidence=[]
+    def visual(source,proposals,duration,progress):
+        evidence.append(True)
+        for item in proposals:item['visual']='La caja sigue cerrada antes del corte.'
+    monkeypatch.setattr(engine,'visual_evidence',visual)
+    answers=iter([json.dumps({'clips':[{'start_id':0,'end_id':3,'reveal_id':4,'title':'Caja','reason':'Falta abrirla.'}]}),
+                  json.dumps({'keep':True,'reason':'No se ve aún el contenido.'})])
+    monkeypatch.setattr(engine.story_engine,'complete',lambda *args:next(answers))
+    result=engine.propose('video.mp4',tmp_path,50,3,90,tmp_path,lambda _:None)
+    assert evidence and len(result)==1 and result[0]['end']==19
+    assert 'Frase 0.' in result[0]['context']
+    answers=iter([json.dumps({'clips':[{'start_id':0,'end_id':3,'reveal_id':4,'title':'Caja','reason':'Falta abrirla.'}]}),
+                  json.dumps({'keep':False,'reason':'Ya se ve el resultado.'})])
+    with pytest.raises(ValueError,match='revisión visual'):
+        engine.propose('video.mp4',tmp_path,50,3,90,tmp_path,lambda _:None)
+
+
+def test_transcription_joins_asr_chunks_at_sentence_boundaries(tmp_path,monkeypatch):
+    import sys
+    from types import SimpleNamespace as NS
+    monkeypatch.setattr(engine,'unload',lambda *args:None)
+    class Whisper:
+        def __init__(self,*args,**kwargs):assert kwargs['compute_type']=='int8'
+        def transcribe(self,*args,**kwargs):
+            assert kwargs['word_timestamps'] is True
+            return iter([
+                NS(end=2,words=[NS(start=0,end=1,word='Esperá'),NS(start=1,end=2,word=' que')]),
+                NS(end=9,words=[NS(start=2,end=3,word=' abra.'),NS(start=4,end=6,word='¿Ganó?'),NS(start=7,end=9,word='Sí.')])]),None
+    monkeypatch.setitem(sys.modules,'faster_whisper',NS(WhisperModel=Whisper))
+    result=engine.transcribe('source.mp4',tmp_path,lambda _:None)
+    assert result[0]=={'id':0,'start':0,'end':3,'text':'Esperá que abra.'}
+    assert len(result)==3
+    monkeypatch.setitem(sys.modules,'faster_whisper',None)
+    assert engine.transcribe('source.mp4',tmp_path,lambda _:None)==result
