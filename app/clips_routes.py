@@ -168,7 +168,7 @@ def complete(id: str):
             raise HTTPException(409, 'Todavía faltan partes del video.')
         info = metadata(path)
         if not math.isfinite(info['duration']) or not 3 <= info['duration'] <= clips_engine.MAX_DURATION or min(info['width'], info['height']) < 1:
-            raise HTTPException(400, 'Usá un MP4 reproducible de entre 3 segundos y 30 minutos.')
+            raise HTTPException(400, 'Usá un MP4 reproducible de entre 3 segundos y 2 horas.')
         job.duration, job.status = info['duration'], 'uploaded'
         job.message = 'Original guardado. Buscá momentos con IA o marcá los recortes.'
         session.commit()

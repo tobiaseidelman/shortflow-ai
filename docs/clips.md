@@ -5,11 +5,13 @@ MP4 con audio original y propone fragmentos para revisar y exportar. No publica
 ningún archivo en redes sociales.
 
 1. Abrí **Clips**, elegí el MP4, la cantidad máxima de propuestas (1, 3 o 6) y
-   su duración máxima (30–120 segundos). El límite inicial es 1 GB / 30 minutos.
+   su duración máxima (30–120 segundos). El límite inicial es 1 GB / 2 horas.
 2. Pulsá **Subir y buscar clips**. Se sube por partes de 4 MB. Si falla la
    conexión, seleccioná el mismo archivo para reanudar. Los originales quedan
    guardados separados de la biblioteca de fondos.
-3. La transcripción local identifica frases completas con tiempos. La IA
+3. El audio se procesa en tramos de 5 minutos y guarda el avance de cada tramo.
+   Si se interrumpe, al reintentar retoma desde el último tramo terminado.
+   La transcripción local identifica frases completas con tiempos. La IA
    propone contexto y una revelación posterior al corte. Un modelo visual
    describe imágenes del inicio y de ambos lados del corte; una revisión
    contrasta esas observaciones con la propuesta. No analiza todos los fotogramas.

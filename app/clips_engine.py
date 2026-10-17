@@ -12,7 +12,8 @@ import numpy as np
 from . import story_engine
 
 VISION_MODEL = 'gemma3:4b'
-MAX_DURATION = 1800
+MAX_DURATION = 7200
+TRANSCRIPT_CHUNK = 300
 
 
 def unload(model):
@@ -23,13 +24,13 @@ def unload(model):
         pass
 
 
-def audio_samples(source, folder):
+def audio_samples(source, folder, start=0, duration=TRANSCRIPT_CHUNK):
     # Normalize with our existing FFmpeg runtime. Passing samples avoids PyAV
     # decoder API changes and consistently handles MP4 audio codecs.
     pcm = Path(folder) / 'speech.pcm'
     try:
-        subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', '-i', str(source),
-                        '-t', str(MAX_DURATION), '-map', '0:a:0', '-ac', '1', '-ar', '16000',
+        subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', '-ss', str(start), '-i', str(source),
+                        '-t', str(duration), '-map', '0:a:0', '-ac', '1', '-ar', '16000',
                         '-f', 's16le', str(pcm)], check=True, capture_output=True, timeout=300)
         samples = np.fromfile(pcm, dtype='<i2').astype(np.float32) / 32768.0
         if not len(samples):
@@ -52,21 +53,41 @@ def transcribe(source, folder, progress):
     progress('Preparando la transcripción local. La primera vez descarga el modelo de voz…')
     model = WhisperModel('small', device='cpu', compute_type='int8', cpu_threads=2,
                          download_root=str(Path(folder).parent / 'speech-models'))
-    segments, _ = model.transcribe(audio_samples(source, folder), beam_size=3, word_timestamps=True,
-                                   vad_filter=True, condition_on_previous_text=False)
-    sentences, words = [], []
-    for segment in segments:
-        for word in segment.words or []:
-            if not math.isfinite(word.start) or not math.isfinite(word.end) or word.end <= word.start:
-                continue
-            words.append({'start': word.start, 'end': word.end, 'text': word.word})
-            # Only propose cuts after complete sentences, not arbitrary ASR chunks.
-            if word.word.strip().endswith(('.', '!', '?', '。', '！', '？')):
-                sentences.append({'id': len(sentences), 'start': words[0]['start'],
-                                  'end': words[-1]['end'],
-                                  'text': ''.join(w['text'] for w in words).strip()})
-                words = []
-        progress(f'Transcribiendo: {int(segment.end)} segundos del video…')
+    from .video_engine import metadata
+    duration = metadata(source)['duration']
+    if not math.isfinite(duration) or not 3 <= duration <= MAX_DURATION:
+        raise ValueError('Usá un video de entre 3 segundos y 2 horas.')
+    checkpoint = Path(folder) / 'transcript-progress.json'
+    state = json.loads(checkpoint.read_text()) if checkpoint.exists() else {}
+    sentences, words = state.get('sentences', []), state.get('words', [])
+    offset = state.get('next_offset', 0)
+    while offset < duration:
+        boundary = min(duration, offset + TRANSCRIPT_CHUNK)
+        # A little context on both sides avoids decoding speech at a hard cut.
+        read_start = max(0, offset - 2)
+        samples = audio_samples(source, folder, read_start, min(duration, boundary + 2) - read_start)
+        progress(f'Transcribiendo tramo {int(offset // TRANSCRIPT_CHUNK) + 1} de {math.ceil(duration / TRANSCRIPT_CHUNK)}…')
+        segments, _ = model.transcribe(samples, beam_size=3, word_timestamps=True,
+                                       vad_filter=True, condition_on_previous_text=False)
+        for segment in segments:
+            for word in segment.words or []:
+                start, end = word.start + read_start, word.end + read_start
+                if not math.isfinite(start) or not math.isfinite(end) or end <= start:
+                    continue
+                # Each word belongs to exactly one core interval, not its padding.
+                if not offset <= (start + end) / 2 < boundary:
+                    continue
+                words.append({'start': max(0, start), 'end': min(duration, end), 'text': word.word})
+                if word.word.strip().endswith(('.', '!', '?', '。', '！', '？')):
+                    sentences.append({'id': len(sentences), 'start': words[0]['start'],
+                                      'end': words[-1]['end'],
+                                      'text': ''.join(w['text'] for w in words).strip()})
+                    words = []
+        del segments, samples
+        offset = boundary
+        temporary = checkpoint.with_suffix('.tmp')
+        temporary.write_text(json.dumps({'next_offset': offset, 'sentences': sentences, 'words': words}, ensure_ascii=False))
+        temporary.replace(checkpoint)
     if words:
         sentences.append({'id': len(sentences), 'start': words[0]['start'], 'end': words[-1]['end'],
                           'text': ''.join(w['text'] for w in words).strip()})
@@ -77,6 +98,7 @@ def transcribe(source, folder, progress):
     temporary = cache.with_suffix('.tmp')
     temporary.write_text(json.dumps(sentences, ensure_ascii=False))
     temporary.replace(cache)
+    checkpoint.unlink(missing_ok=True)
     return sentences
 
 

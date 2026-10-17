@@ -206,6 +206,7 @@ def test_transcription_joins_asr_chunks_at_sentence_boundaries(tmp_path,monkeypa
     from types import SimpleNamespace as NS
     monkeypatch.setattr(engine,'unload',lambda *args:None)
     monkeypatch.setattr(engine,'audio_samples',lambda *args:engine.np.zeros(16000,dtype=engine.np.float32))
+    monkeypatch.setattr('app.video_engine.metadata',lambda _: {'duration':10})
     class Whisper:
         def __init__(self,*args,**kwargs):assert kwargs['compute_type']=='int8'
         def transcribe(self,*args,**kwargs):
@@ -241,3 +242,47 @@ def test_grounded_choices_reject_fabricated_ids(tmp_path,monkeypatch):
     result=engine.choose_grounded_cuts(sentences,30,20,tmp_path,0)
     assert len(result)==1 and result[0]['end']==14 and result[0]['start']==0
     assert result[0]['reveal']=='Frase 3.'
+
+
+def test_long_transcript_resume_preserves_global_times(tmp_path,monkeypatch):
+    import sys
+    from types import SimpleNamespace as NS
+    monkeypatch.setattr(engine,'unload',lambda *args:None)
+    monkeypatch.setattr('app.video_engine.metadata',lambda _: {'duration':601})
+    offsets=[]
+    def audio(source,folder,start,duration):
+        assert duration<=304
+        offsets.append(start)
+        return start
+    monkeypatch.setattr(engine,'audio_samples',audio)
+    fail=[True]
+    class Whisper:
+        def __init__(self,*args,**kwargs):pass
+        def transcribe(self,start,**kwargs):
+            if start==298 and fail[0]:raise RuntimeError('interrupted')
+            if start==0:
+                words=[NS(start=1,end=2,word='Uno.'),NS(start=299,end=299.5,word='Cruza')]
+            elif start==298:
+                words=[NS(start=1,end=1.5,word='Cruza'),NS(start=2.1,end=3,word=' límite.'),NS(start=4,end=5,word='Dos.')]
+            else:words=[NS(start=2.1,end=2.9,word='Final.')]
+            return iter([NS(words=words)]),None
+    monkeypatch.setitem(sys.modules,'faster_whisper',NS(WhisperModel=Whisper))
+    with pytest.raises(RuntimeError):engine.transcribe('video',tmp_path,lambda _:None)
+    assert json.loads((tmp_path/'transcript-progress.json').read_text())['next_offset']==300
+    fail[0]=False
+    result=engine.transcribe('video',tmp_path,lambda _:None)
+    assert offsets==[0,298,298,598]
+    assert result[1]['text']=='Cruza límite.' and result[1]['start']==299 and result[1]['end']==301
+    assert result[-1]['start']==600.1
+    assert not (tmp_path/'transcript-progress.json').exists()
+
+
+def test_hour_long_upload_accepted_but_over_two_hours_rejected(client,video,monkeypatch):
+    monkeypatch.setattr(routes,'metadata',lambda _: {'duration':3478.73,'width':854,'height':480})
+    id=upload(client,video)
+    assert client.get(f'/api/clip-projects/{id}').json()['duration']==3478.73
+    monkeypatch.setattr(routes,'metadata',lambda _: {'duration':7201,'width':854,'height':480})
+    job=client.post('/api/clip-projects',json={'name':'long.mp4','size':len(video),'count':1,'maximum':90}).json()
+    client.put(f"/api/clip-projects/{job['id']}/chunks?offset=0",content=video)
+    response=client.post(f"/api/clip-projects/{job['id']}/complete")
+    assert response.status_code==400 and '2 horas' in response.text
