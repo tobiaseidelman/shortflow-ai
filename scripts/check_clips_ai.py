@@ -32,7 +32,11 @@ with TemporaryDirectory(prefix='shortflow-clips-ai-') as temp:
     progress=lambda message: print(message,flush=True)
     print('Reveal starts at',d1,flush=True)
     print('TRANSCRIPT:',json.dumps(transcribe(source,analysis,progress),ensure_ascii=False),flush=True)
+    try:
     result=propose(source,analysis,metadata(source)['duration'],1,90,root,progress)
+finally:
+    for evidence in sorted(analysis.glob('proposal-*.json')):
+        print(evidence.name, evidence.read_text(), flush=True)
     print('REAL CLIPS PROPOSALS:',json.dumps(result,ensure_ascii=False),flush=True)
     assert result, 'No usable suspense proposal in controlled reveal'
     assert result[0]['end']<=d1+.5, 'The cut already includes the revealed image'

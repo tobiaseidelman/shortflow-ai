@@ -228,3 +228,23 @@ def test_real_mp4_audio_normalized_without_decoder_api(client,video,tmp_path):
     assert abs(len(samples)/16000-5)<.1
     assert abs(samples).max()>.01
     assert not (tmp_path/'speech.pcm').exists()
+
+
+def test_proposal_retries_short_cut_without_relaxing_limits(tmp_path,monkeypatch):
+    sentences=[{'id':i,'start':i*5,'end':i*5+4,'text':f'Frase {i}.'} for i in range(6)]
+    monkeypatch.setattr(engine,'transcribe',lambda *args:sentences)
+    monkeypatch.setattr(engine.story_engine,'ensure_model',lambda *args:None)
+    monkeypatch.setattr(engine,'unload',lambda *args:None)
+    monkeypatch.setattr(engine,'visual_evidence',lambda *args:None)
+    short={'start_id':2,'end_id':3,'reveal_id':4,'title':'Caja','reason':'Falta abrirla.'}
+    answers=iter([json.dumps({'clips':[short]}), json.dumps({'clips':[short|{'start_id':0}]}),
+                  json.dumps({'keep':True,'reason':'Sigue cerrada.'})])
+    calls=[]
+    def complete(messages,schema):
+        calls.append(list(messages))
+        return next(answers)
+    monkeypatch.setattr(engine.story_engine,'complete',complete)
+    result=engine.propose('video.mp4',tmp_path,30,1,90,tmp_path,lambda _:None)
+    assert result[0]['start']==0 and result[0]['end']==19
+    assert len(calls[1])==4 and '12 y 90' in calls[1][-1]['content']
+    assert (tmp_path/'proposal-0-0.json').exists()
