@@ -248,3 +248,16 @@ def test_proposal_retries_short_cut_without_relaxing_limits(tmp_path,monkeypatch
     assert result[0]['start']==0 and result[0]['end']==19
     assert len(calls[1])==4 and '12 y 90' in calls[1][-1]['content']
     assert (tmp_path/'proposal-0-0.json').exists()
+
+
+def test_grounded_choices_reject_fabricated_ids(tmp_path,monkeypatch):
+    sentences=[{'id':i,'start':i*5,'end':i*5+4,'text':f'Frase {i}.'} for i in range(6)]
+    def complete(messages,schema):
+        options=json.loads(messages[-1]['content'].split('Options:\n')[1])
+        assert all('after_cut' in c for c in options)
+        return json.dumps({'clips':[{'choice_id':999,'title':'Falso','reason':'No existe'},
+                                    {'choice_id':0,'title':'Caja','reason':'Falta abrir.'}]})
+    monkeypatch.setattr(engine.story_engine,'complete',complete)
+    result=engine.choose_grounded_cuts(sentences,30,20,tmp_path,0)
+    assert len(result)==1 and result[0]['end']==14 and result[0]['start']==0
+    assert result[0]['reveal']=='Frase 3.'
